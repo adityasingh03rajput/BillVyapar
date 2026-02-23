@@ -488,9 +488,10 @@ export function CreateDocumentPage() {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="group neon-target neon-hover transition-all"
+              data-tour-id="cta-save-document"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
             >
-              <Save className="h-4 w-4 mr-2 neon-target neon-hover transition-all" />
+              <Save className="h-4 w-4 mr-2" />
               {saving ? 'Saving...' : 'Save Document'}
             </Button>
           </div>

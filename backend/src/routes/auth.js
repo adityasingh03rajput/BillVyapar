@@ -96,6 +96,20 @@ authRouter.post('/signin', async (req, res, next) => {
 
     const deviceId = req.header('X-Device-ID') || `web-${Date.now()}`;
 
+    const existingSession = await Session.findOne({ userId: user._id });
+    if (existingSession && existingSession.deviceId && existingSession.deviceId !== deviceId) {
+      const lockMinutes = Number(process.env.SESSION_LOCK_MINUTES || 60 * 24);
+      const maxAgeMs = Math.max(1, lockMinutes) * 60 * 1000;
+      const lastActiveMs = existingSession.lastActive ? new Date(existingSession.lastActive).getTime() : 0;
+      const isActive = Date.now() - lastActiveMs < maxAgeMs;
+      if (isActive) {
+        return res.status(409).json({
+          error: 'Account already opened on another device. Use Forgot Password to continue.',
+          code: 'ALREADY_LOGGED_IN_ANOTHER_DEVICE',
+        });
+      }
+    }
+
     await Session.findOneAndUpdate(
       { userId: user._id },
       { $set: { deviceId, lastActive: new Date() } },

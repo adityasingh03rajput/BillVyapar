@@ -262,7 +262,7 @@ export function CustomersPage() {
             </Button>
             <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
               <DialogTrigger asChild>
-                <Button>
+                <Button data-tour-id="cta-add-customer">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Customer
                 </Button>

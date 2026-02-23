@@ -143,7 +143,7 @@ export function ItemsPage() {
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button className="mt-4 md:mt-0">
+              <Button className="mt-4 md:mt-0" data-tour-id="cta-add-item">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Item
               </Button>

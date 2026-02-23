@@ -85,7 +85,12 @@ export function AuthPage() {
       }
       navigate('/welcome');
     } catch (error: any) {
-      toast.error(error.message || 'Authentication failed');
+      if (error?.code === 'ALREADY_LOGGED_IN_ANOTHER_DEVICE') {
+        toast.error('Already opened on another device. Reset password to continue.');
+        setMode('forgot');
+      } else {
+        toast.error(error.message || 'Authentication failed');
+      }
     } finally {
       setLoading(false);
     }

@@ -368,6 +368,7 @@ export function DashboardPage() {
               <Button 
                 variant="outline" 
                 className="h-auto py-4 flex-col gap-2"
+                data-tour-id="cta-create-document"
                 onClick={() => navigate('/documents/create')}
                 disabled={!isSubscriptionActive}
               >
@@ -377,6 +378,7 @@ export function DashboardPage() {
               <Button 
                 variant="outline" 
                 className="h-auto py-4 flex-col gap-2"
+                data-tour-id="cta-add-customer"
                 onClick={() => navigate('/customers')}
                 disabled={!isSubscriptionActive}
               >
@@ -386,6 +388,7 @@ export function DashboardPage() {
               <Button 
                 variant="outline" 
                 className="h-auto py-4 flex-col gap-2"
+                data-tour-id="cta-add-item"
                 onClick={() => navigate('/items')}
                 disabled={!isSubscriptionActive}
               >

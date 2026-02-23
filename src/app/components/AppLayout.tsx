@@ -15,13 +15,14 @@ import {
   LogOut,
   Settings,
   Crown,
+  Truck,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import { useState, useEffect } from 'react';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
-import { WalkthroughDialog } from './WalkthroughDialog';
+import { GuidedTour } from './GuidedTour';
 import {
   cacheSubscriptionToken,
   validateSubscriptionOffline,
@@ -213,6 +214,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     { icon: CreditCard, label: 'Subscription', path: '/subscription' },
   ];
 
+  const menuTourId = (path: string) => {
+    if (path === '/dashboard') return 'nav-dashboard';
+    if (path === '/documents') return 'nav-documents';
+    if (path === '/customers') return 'nav-parties';
+    if (path === '/items') return 'nav-items';
+    if (path === '/analytics') return 'nav-analytics';
+    if (path === '/reports/gst') return 'nav-gst';
+    if (path === '/subscription') return 'nav-subscription';
+    return undefined;
+  };
+
   const NavigationMenu = () => (
     <nav className="space-y-1">
       {menuItems.map((item) => {
@@ -224,6 +236,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         return (
           <button
             key={item.path}
+            data-tour-id={menuTourId(item.path)}
             onClick={() => {
               navigate(item.path);
               setMobileMenuOpen(false);
@@ -256,7 +269,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <WalkthroughDialog
+      <GuidedTour
         open={walkthroughOpen}
         onOpenChange={(open) => {
           setWalkthroughOpen(open);
@@ -272,6 +285,20 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex items-center gap-2 mb-4">
             <FileText className="h-8 w-8 text-blue-600" />
             <h1 className="text-2xl font-bold text-gray-900">Hukum</h1>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setWalkthroughOpen(true)}
+              aria-label="Open tour"
+              title="Tour"
+              data-tour-id="tour-trigger"
+              className="group h-9 w-9 travel-glow border-glow border-glow-hover border-blue-500/60 text-blue-600 hover:border-blue-500"
+            >
+              <span className="icon-aura icon-aura-hover">
+                <Truck className="h-4 w-4 neon-target neon-hover" />
+              </span>
+            </Button>
           </div>
           {currentProfile.businessName && (
             <div className="bg-blue-50 p-3 rounded-lg">
@@ -289,17 +316,9 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
 
         <div className="p-4 border-t border-gray-200 space-y-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full justify-start"
-            onClick={() => setWalkthroughOpen(true)}
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Tour
-          </Button>
           <button
             type="button"
+            data-tour-id="nav-profiles"
             onClick={() => {
               if (subscriptionExpired) return;
               navigate('/profiles');
@@ -342,17 +361,21 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex items-center gap-2">
             <FileText className="h-6 w-6 text-blue-600" />
             <h1 className="text-xl font-bold">Hukum</h1>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setWalkthroughOpen(true)}
+              aria-label="Open tour"
+              title="Tour"
+              data-tour-id="tour-trigger"
+              className="group h-9 w-9 travel-glow border-glow border-glow-hover border-blue-500/60 text-blue-600 hover:border-blue-500"
+            >
+              <span className="icon-aura icon-aura-hover">
+                <Truck className="h-4 w-4 neon-target neon-hover" />
+              </span>
+            </Button>
           </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setWalkthroughOpen(true)}
-            className="mr-2"
-          >
-            Tour
-          </Button>
           
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
@@ -382,18 +405,6 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
 
               <div className="p-4 border-t border-gray-200 space-y-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    setWalkthroughOpen(true);
-                  }}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Tour
-                </Button>
                 <button
                   type="button"
                   onClick={() => {

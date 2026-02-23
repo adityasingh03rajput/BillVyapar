@@ -520,7 +520,7 @@ export function DocumentsPage() {
             <h1 className="text-3xl font-bold text-gray-900">Documents</h1>
             <p className="text-gray-600 mt-1">Manage all your business documents</p>
           </div>
-          <Button onClick={() => navigate('/documents/create')} className="mt-4 md:mt-0">
+          <Button onClick={() => navigate('/documents/create')} className="mt-4 md:mt-0" data-tour-id="cta-documents-create">
             <Plus className="h-4 w-4 mr-2" />
             Create Document
           </Button>
@@ -652,12 +652,12 @@ export function DocumentsPage() {
 
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="icon">
+                          <Button variant="outline" size="icon" data-tour-id="doc-action-menu">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openPaymentDialog(doc)}>
+                          <DropdownMenuItem data-tour-id="doc-action-add-payment" onClick={() => openPaymentDialog(doc)}>
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                             Add Payment
                           </DropdownMenuItem>
@@ -677,7 +677,7 @@ export function DocumentsPage() {
                             <Repeat className="h-4 w-4 mr-2" />
                             Convert to Challan
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openPdfDialog(doc.id)}>
+                          <DropdownMenuItem data-tour-id="doc-action-download-pdf" onClick={() => openPdfDialog(doc.id)}>
                             <Download className="h-4 w-4 mr-2" />
                             Download PDF
                           </DropdownMenuItem>

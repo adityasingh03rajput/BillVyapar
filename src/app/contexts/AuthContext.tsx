@@ -83,7 +83,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await response.json();
     
     if (data.error) {
-      throw new Error(data.error);
+      const err: any = new Error(data.error);
+      err.code = data.code;
+      throw err;
     }
 
     const userData = {
