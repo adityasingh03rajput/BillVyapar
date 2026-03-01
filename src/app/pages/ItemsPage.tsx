@@ -6,7 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Plus, Search, Package, Tag } from 'lucide-react';
+import { Plus, Search, Package, Tag, Edit } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
@@ -18,6 +18,8 @@ interface Item {
   hsnSac?: string;
   unit: string;
   rate: number;
+  sellingPrice?: number;
+  purchaseCost?: number;
   discount?: number;
   cgst: number;
   sgst: number;
@@ -30,9 +32,14 @@ export function ItemsPage() {
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<Item>>({});
   const [formData, setFormData] = useState<Partial<Item>>({
     unit: 'pcs',
     rate: 0,
+    sellingPrice: 0,
+    purchaseCost: 0,
     discount: 0,
     cgst: 9,
     sgst: 9,
@@ -78,6 +85,47 @@ export function ItemsPage() {
     }
   };
 
+  const handleEditClick = (item: Item) => {
+    setEditingItemId(item.id);
+    setEditFormData({ ...item });
+    setShowEditDialog(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItemId) return;
+    if (!editFormData.name?.trim()) {
+      toast.error('Item name is required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/items/${editingItemId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'X-Device-ID': deviceId,
+          'X-Profile-ID': profileId,
+        },
+        body: JSON.stringify(editFormData),
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        toast.error(data.error);
+      } else {
+        toast.success('Item updated successfully!');
+        setItems(prev => prev.map(i => (i.id === data.id ? data : i)));
+        setShowEditDialog(false);
+        setEditingItemId(null);
+        setEditFormData({});
+      }
+    } catch {
+      toast.error('Failed to update item');
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -109,6 +157,8 @@ export function ItemsPage() {
         setFormData({
           unit: 'pcs',
           rate: 0,
+          sellingPrice: 0,
+          purchaseCost: 0,
           discount: 0,
           cgst: 9,
           sgst: 9,
@@ -132,12 +182,12 @@ export function ItemsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Items Catalog</h1>
-            <p className="text-gray-600 mt-1">Manage your products and services</p>
+            <h1 className="text-3xl font-bold text-foreground">Items Catalog</h1>
+            <p className="text-muted-foreground mt-1">Manage your products and services</p>
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
@@ -178,16 +228,40 @@ export function ItemsPage() {
                     />
                   </div>
                 </div>
-                <div>
-                  <Label>Rate (₹)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.rate || 0}
-                    onChange={(e) => setFormData({...formData, rate: parseFloat(e.target.value) || 0})}
-                    placeholder="0.00"
-                  />
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <Label>Rate (₹)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.rate || 0}
+                      onChange={(e) => setFormData({ ...formData, rate: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <Label>Selling Price (₹)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.sellingPrice || 0}
+                      onChange={(e) => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <Label>Purchase Cost (₹)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.purchaseCost || 0}
+                      onChange={(e) => setFormData({ ...formData, purchaseCost: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
                 <div>
                   <Label>Disc %</Label>
@@ -257,7 +331,7 @@ export function ItemsPage() {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search items by name or HSN/SAC code..."
                 value={searchTerm}
@@ -272,11 +346,11 @@ export function ItemsPage() {
         {filteredItems.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 {items.length === 0 ? 'No items yet' : 'No matching items'}
               </h3>
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 {items.length === 0 
                   ? 'Add your first item to get started'
                   : 'Try a different search term'}
@@ -303,43 +377,63 @@ export function ItemsPage() {
                         <CardTitle className="text-lg truncate">{item.name}</CardTitle>
                         {item.hsnSac && (
                           <div className="flex items-center gap-1 mt-1">
-                            <Tag className="h-3 w-3 text-gray-500" />
-                            <p className="text-xs text-gray-600 font-mono">{item.hsnSac}</p>
+                            <Tag className="h-3 w-3 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground font-mono">{item.hsnSac}</p>
                           </div>
                         )}
                       </div>
                     </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEditClick(item)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <p className="text-gray-600 text-xs">Rate</p>
+                      <p className="text-muted-foreground text-xs">Rate</p>
                       <p className="font-semibold text-blue-600">₹{item.rate.toFixed(2)}</p>
                     </div>
                     <div>
-                      <p className="text-gray-600 text-xs">Unit</p>
+                      <p className="text-muted-foreground text-xs">Unit</p>
                       <p className="font-semibold">{item.unit}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Selling Price</p>
+                      <p className="font-semibold">₹{Number(item.sellingPrice || 0).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Purchase Cost</p>
+                      <p className="font-semibold">₹{Number(item.purchaseCost || 0).toFixed(2)}</p>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-3 gap-2 text-xs pt-2 border-t">
                     <div>
-                      <p className="text-gray-600">CGST</p>
+                      <p className="text-muted-foreground">CGST</p>
                       <p className="font-semibold">{item.cgst}%</p>
                     </div>
                     <div>
-                      <p className="text-gray-600">SGST</p>
+                      <p className="text-muted-foreground">SGST</p>
                       <p className="font-semibold">{item.sgst}%</p>
                     </div>
                     <div>
-                      <p className="text-gray-600">IGST</p>
+                      <p className="text-muted-foreground">IGST</p>
                       <p className="font-semibold">{item.igst}%</p>
                     </div>
                   </div>
 
                   {item.description && (
-                    <p className="text-xs text-gray-600 line-clamp-2 pt-2 border-t">
+                    <p className="text-xs text-muted-foreground line-clamp-2 pt-2 border-t">
                       {item.description}
                     </p>
                   )}
@@ -349,11 +443,147 @@ export function ItemsPage() {
           </div>
         )}
 
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Item</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <Label>Item Name *</Label>
+                <Input
+                  required
+                  value={editFormData.name || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  placeholder="Product or service name"
+                />
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label>HSN/SAC Code</Label>
+                  <Input
+                    value={editFormData.hsnSac || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, hsnSac: e.target.value })}
+                    placeholder="HSN or SAC code"
+                  />
+                </div>
+                <div>
+                  <Label>Unit</Label>
+                  <Input
+                    value={editFormData.unit || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, unit: e.target.value })}
+                    placeholder="pcs, kg, ltr, etc."
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Rate (₹)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editFormData.rate || 0}
+                    onChange={(e) => setEditFormData({ ...editFormData, rate: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label>Selling Price (₹)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editFormData.sellingPrice || 0}
+                    onChange={(e) => setEditFormData({ ...editFormData, sellingPrice: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label>Purchase Cost (₹)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editFormData.purchaseCost || 0}
+                    onChange={(e) => setEditFormData({ ...editFormData, purchaseCost: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Disc %</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={editFormData.discount || 0}
+                  onChange={(e) => setEditFormData({ ...editFormData, discount: parseFloat(e.target.value) || 0 })}
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <Label>CGST %</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editFormData.cgst || 0}
+                    onChange={(e) => setEditFormData({ ...editFormData, cgst: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Label>SGST %</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editFormData.sgst || 0}
+                    onChange={(e) => setEditFormData({ ...editFormData, sgst: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Label>IGST %</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editFormData.igst || 0}
+                    onChange={(e) => setEditFormData({ ...editFormData, igst: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Description</Label>
+                <Textarea
+                  value={editFormData.description || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Item description (optional)"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Save Changes</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Summary */}
         {filteredItems.length > 0 && (
           <Card className="mt-6">
             <CardContent className="py-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Showing {filteredItems.length} of {items.length} items
               </p>
             </CardContent>

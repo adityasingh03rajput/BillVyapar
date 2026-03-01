@@ -16,6 +16,9 @@ import { subscriptionRouter } from './routes/subscription.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { paymentsRouter } from './routes/payments.js';
 import { reportsRouter } from './routes/reports.js';
+import twilio from 'twilio';
+import { Document } from './models/Document.js';
+import { BusinessProfile } from './models/BusinessProfile.js';
 
 const app = express();
 
@@ -93,7 +96,126 @@ if (!process.env.JWT_SECRET) {
 
 await mongoose.connect(mongoUri);
 
+const remindersEnabled = String(process.env.AUTO_REMINDERS_ENABLED || '').toLowerCase() === 'true';
+const reminderIntervalMinutes = Number(process.env.AUTO_REMINDERS_INTERVAL_MINUTES || 60);
+const reminderLookbackDays = Number(process.env.AUTO_REMINDERS_LOOKBACK_DAYS || 60);
+const reminderThrottleDays = Number(process.env.AUTO_REMINDERS_THROTTLE_DAYS || 2);
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioFrom = process.env.TWILIO_FROM_NUMBER;
+
+const shouldRunTwilio = remindersEnabled && twilioAccountSid && twilioAuthToken && twilioFrom;
+const twilioClient = shouldRunTwilio ? twilio(twilioAccountSid, twilioAuthToken) : null;
+
+const isSameDay = (a, b) => {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+};
+
+const parseDocDate = (s) => {
+  if (!s) return null;
+  const d = new Date(String(s));
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const daysBetween = (a, b) => {
+  const da = new Date(a);
+  const db = new Date(b);
+  const diff = Math.abs(db.getTime() - da.getTime());
+  return diff / (1000 * 60 * 60 * 24);
+};
+
+const runAutoReminders = async () => {
+  if (!twilioClient) return;
+
+  const now = new Date();
+  const lookbackStart = new Date(now);
+  lookbackStart.setDate(now.getDate() - reminderLookbackDays);
+
+  const candidates = await Document.find({
+    type: { $in: ['invoice', 'billing'] },
+    paymentStatus: { $ne: 'paid' },
+    status: { $ne: 'draft' },
+    updatedAt: { $gte: lookbackStart },
+  }).sort({ updatedAt: -1 }).limit(500);
+
+  for (const doc of candidates) {
+    const to = String(doc.customerMobile || '').trim();
+    if (!to) continue;
+
+    const due = parseDocDate(doc.dueDate);
+    if (!due) continue;
+
+    const isDueOrOverdue = due.getTime() <= now.getTime();
+    if (!isDueOrOverdue) continue;
+
+    const isOverdue = now.getTime() > due.getTime();
+
+    const last = doc.lastReminderSentAt;
+    if (last && isSameDay(last, now)) continue;
+
+    if (isOverdue && last && Number.isFinite(reminderThrottleDays) && reminderThrottleDays > 1) {
+      if (daysBetween(last, now) < reminderThrottleDays) continue;
+    }
+
+    const profile = await BusinessProfile.findOne({ _id: doc.profileId, userId: doc.userId }).lean();
+    const template = String(profile?.smsReminderTemplate || '').trim();
+
+    const amount = Number(doc.grandTotal || 0);
+    const invoiceNo = String(doc.documentNumber || '').trim();
+    const party = String(doc.customerName || '').trim();
+    const dueStr = String(doc.dueDate || '').trim();
+    const businessName = String(profile?.businessName || '').trim();
+
+    const defaultMsg = `Payment Reminder: ${party ? party + ', ' : ''}${invoiceNo ? invoiceNo + ', ' : ''}Amount ₹${amount.toFixed(2)}${dueStr ? ` due on ${dueStr}` : ''}. Kindly pay at the earliest.`;
+    const fromTemplate = template
+      ? template
+          .replaceAll('{party}', party)
+          .replaceAll('{docNo}', invoiceNo)
+          .replaceAll('{amount}', amount.toFixed(2))
+          .replaceAll('{dueDate}', dueStr)
+          .replaceAll('{businessName}', businessName)
+      : '';
+    const msg = fromTemplate || defaultMsg;
+
+    try {
+      await twilioClient.messages.create({ from: twilioFrom, to, body: msg });
+      doc.lastReminderSentAt = new Date();
+      doc.reminderLogs = [
+        ...(doc.reminderLogs || []),
+        { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'sent', error: null },
+      ];
+      await doc.save();
+    } catch (e) {
+      const error = e?.message ? String(e.message) : 'Failed to send SMS';
+      doc.reminderLogs = [
+        ...(doc.reminderLogs || []),
+        { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'failed', error },
+      ];
+      await doc.save();
+    }
+  }
+};
+
 app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Backend listening on http://localhost:${port}`);
 });
+
+if (remindersEnabled && !shouldRunTwilio) {
+  // eslint-disable-next-line no-console
+  console.warn('AUTO_REMINDERS_ENABLED=true but Twilio env vars are missing; auto reminders will not run');
+}
+
+if (shouldRunTwilio) {
+  // eslint-disable-next-line no-console
+  console.log(`Auto reminders enabled: interval ${reminderIntervalMinutes} minutes`);
+  const intervalMs = Math.max(1, reminderIntervalMinutes) * 60 * 1000;
+  setInterval(() => {
+    runAutoReminders().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('Auto reminder job failed', err);
+    });
+  }, intervalMs);
+}

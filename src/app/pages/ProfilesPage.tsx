@@ -33,6 +33,7 @@ interface BusinessProfile {
   accountNumber?: string;
   ifscCode?: string;
   upiId?: string;
+  smsReminderTemplate?: string;
   customFields?: Record<string, any>;
 }
 
@@ -452,6 +453,17 @@ export function ProfilesPage() {
                   />
                 </div>
 
+                <div>
+                  <Label htmlFor="editSmsReminderTemplate">SMS Reminder Template</Label>
+                  <Textarea
+                    id="editSmsReminderTemplate"
+                    value={editFormData.smsReminderTemplate || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, smsReminderTemplate: e.target.value })}
+                    placeholder="Use variables: {party}, {docNo}, {amount}, {dueDate}, {businessName}"
+                    rows={2}
+                  />
+                </div>
+
                 <div className="grid md:grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="editCity">City</Label>
@@ -647,6 +659,17 @@ export function ProfilesPage() {
                     id="address"
                     value={formData.billingAddress || ''}
                     onChange={(e) => setFormData({...formData, billingAddress: e.target.value})}
+                    rows={2}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="smsReminderTemplate">SMS Reminder Template</Label>
+                  <Textarea
+                    id="smsReminderTemplate"
+                    value={formData.smsReminderTemplate || ''}
+                    onChange={(e) => setFormData({ ...formData, smsReminderTemplate: e.target.value })}
+                    placeholder="Use variables: {party}, {docNo}, {amount}, {dueDate}, {businessName}"
                     rows={2}
                   />
                 </div>

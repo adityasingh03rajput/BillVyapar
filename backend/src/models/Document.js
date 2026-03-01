@@ -10,12 +10,26 @@ const documentItemSchema = new mongoose.Schema(
     quantity: { type: Number, default: 0 },
     unit: { type: String, default: null },
     rate: { type: Number, default: 0 },
+    sellingPrice: { type: Number, default: null },
+    purchaseCost: { type: Number, default: null },
     currency: { type: String, default: 'INR' },
     discount: { type: Number, default: 0 },
     cgst: { type: Number, default: 0 },
     sgst: { type: Number, default: 0 },
     igst: { type: Number, default: 0 },
     total: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
+const reminderLogSchema = new mongoose.Schema(
+  {
+    sentAt: { type: Date, default: Date.now },
+    channel: { type: String, default: null },
+    to: { type: String, default: null },
+    message: { type: String, default: null },
+    status: { type: String, default: 'sent' },
+    error: { type: String, default: null },
   },
   { _id: false }
 );
@@ -112,6 +126,9 @@ const documentSchema = new mongoose.Schema(
     version: { type: Number, required: true, default: 1 },
 
     convertedFrom: { type: String, default: null },
+
+    lastReminderSentAt: { type: Date, default: null },
+    reminderLogs: { type: [reminderLogSchema], default: [] },
   },
   { timestamps: true }
 );

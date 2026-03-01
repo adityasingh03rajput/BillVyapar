@@ -5,7 +5,6 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import { FileText, Shield, Cloud, Zap } from 'lucide-react';
 import { API_URL } from '../config/api';
@@ -152,9 +151,9 @@ export function AuthPage() {
             </Card>
           </div>
 
-          <div className="md:hidden -mx-4 px-4">
-            <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
-              <Card className="min-w-[260px] snap-start">
+          <div className="md:hidden">
+            <div className="grid grid-cols-1 gap-4">
+              <Card>
                 <CardHeader>
                   <Shield className="h-7 w-7 text-blue-600 mb-2" />
                   <CardTitle className="text-base">Secure & Private</CardTitle>
@@ -166,7 +165,7 @@ export function AuthPage() {
                 </CardContent>
               </Card>
 
-              <Card className="min-w-[260px] snap-start">
+              <Card>
                 <CardHeader>
                   <Cloud className="h-7 w-7 text-green-600 mb-2" />
                   <CardTitle className="text-base">Offline First</CardTitle>
@@ -178,7 +177,7 @@ export function AuthPage() {
                 </CardContent>
               </Card>
 
-              <Card className="min-w-[260px] snap-start">
+              <Card>
                 <CardHeader>
                   <Zap className="h-7 w-7 text-green-600 mb-2" />
                   <CardTitle className="text-base">Multiple Profiles</CardTitle>

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { AppLayout } from '../components/AppLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
 import { 
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ export function DocumentsPage() {
   const [filteredDocs, setFilteredDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [partyFilter, setPartyFilter] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const { accessToken, deviceId } = useAuth();
@@ -72,6 +74,69 @@ export function DocumentsPage() {
     }
   };
 
+  const openReminderDialog = (doc: any) => {
+    setReminderDoc(doc);
+    setReminderTo(String(doc?.customerMobile || '').trim());
+    setReminderMessage(buildReminderMessage(doc));
+    setReminderDialogOpen(true);
+  };
+
+  const handleSendSmsReminder = async () => {
+    if (!reminderDoc) return;
+    if (!accessToken || !deviceId || !profileId) return;
+    const to = String(reminderTo || '').trim();
+    if (!to) {
+      toast.error('Mobile number is required');
+      return;
+    }
+    const message = String(reminderMessage || '').trim();
+    if (!message) {
+      toast.error('Message is required');
+      return;
+    }
+
+    setReminderSending(true);
+    try {
+      const res = await fetch(`${apiUrl}/documents/${reminderDoc.id}/remind`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'X-Device-ID': deviceId,
+          'X-Profile-ID': profileId,
+        },
+        body: JSON.stringify({ channel: 'sms', to, message }),
+      });
+
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+      toast.success('SMS reminder sent');
+      setReminderDialogOpen(false);
+      await loadDocuments();
+    } catch {
+      toast.error('Failed to send SMS reminder');
+    } finally {
+      setReminderSending(false);
+    }
+  };
+
+  const handleCopyReminder = async () => {
+    const message = String(reminderMessage || '').trim();
+    if (!message) {
+      toast.error('Nothing to copy');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(message);
+      toast.success('Copied');
+    } catch {
+      toast.error('Failed to copy');
+    }
+  };
+
   const currentProfile = readCurrentProfile();
   const profileId = currentProfile?.id;
 
@@ -89,6 +154,12 @@ export function DocumentsPage() {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
 
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [reminderDoc, setReminderDoc] = useState<any | null>(null);
+  const [reminderTo, setReminderTo] = useState('');
+  const [reminderMessage, setReminderMessage] = useState('');
+  const [reminderSending, setReminderSending] = useState(false);
+
   useEffect(() => {
     if (!accessToken || !deviceId || !profileId) return;
     loadDocuments();
@@ -97,7 +168,7 @@ export function DocumentsPage() {
 
   useEffect(() => {
     filterDocuments();
-  }, [documents, searchTerm, filterType, filterStatus]);
+  }, [documents, searchTerm, partyFilter, filterType, filterStatus]);
 
   const loadDocuments = async () => {
     if (!accessToken || !deviceId || !profileId) return;
@@ -125,6 +196,8 @@ export function DocumentsPage() {
     const source = Array.isArray(docs) ? docs : documents;
     let filtered = [...source];
 
+    const norm = (v: any) => String(v || '').trim().toLowerCase();
+
     // Filter by type
     if (filterType !== 'all') {
       filtered = filtered.filter(doc => doc.type === filterType);
@@ -148,8 +221,44 @@ export function DocumentsPage() {
       );
     }
 
+    // Party filter (customer/supplier name)
+    if (partyFilter.trim()) {
+      const q = norm(partyFilter);
+      filtered = filtered.filter(doc => {
+        const partyName = norm(doc.customerName || doc.partyName || doc.supplierName);
+        return partyName.includes(q);
+      });
+    }
+
     setFilteredDocs(filtered);
   };
+
+  const norm = (v: any) => String(v || '').trim().toLowerCase();
+  const partySalesOutstanding = partyFilter.trim()
+    ? documents
+        .filter((d) => {
+          const partyName = norm(d.customerName || d.partyName || d.supplierName);
+          const q = norm(partyFilter);
+          const isSameParty = partyName.includes(q);
+          const isSalesDoc = d.type === 'invoice' || d.type === 'billing';
+          const isUnpaid = d.paymentStatus !== 'paid';
+          return isSameParty && isSalesDoc && isUnpaid;
+        })
+        .reduce((sum, d) => sum + Number(d.grandTotal || 0), 0)
+    : 0;
+
+  const partyPurchasePayable = partyFilter.trim()
+    ? documents
+        .filter((d) => {
+          const partyName = norm(d.customerName || d.partyName || d.supplierName);
+          const q = norm(partyFilter);
+          const isSameParty = partyName.includes(q);
+          const isPurchaseDoc = d.type === 'purchase';
+          const isUnpaid = d.paymentStatus !== 'paid';
+          return isSameParty && isPurchaseDoc && isUnpaid;
+        })
+        .reduce((sum, d) => sum + Number(d.grandTotal || 0), 0)
+    : 0;
 
   const handleDuplicate = async (docId: string) => {
     try {
@@ -208,6 +317,14 @@ export function DocumentsPage() {
       month: 'short',
       year: 'numeric',
     });
+  };
+
+  const buildReminderMessage = (doc: any) => {
+    const amount = Number(doc?.grandTotal || 0);
+    const due = String(doc?.dueDate || '').trim();
+    const invoiceNo = String(doc?.documentNumber || '').trim();
+    const party = String(doc?.customerName || '').trim();
+    return `Payment Reminder: ${party ? party + ', ' : ''}${invoiceNo ? invoiceNo + ', ' : ''}Amount ₹${amount.toFixed(2)}${due ? ` due on ${due}` : ''}. Kindly pay at the earliest.`;
   };
 
   const safeFilename = (name: string) => {
@@ -410,9 +527,9 @@ export function DocumentsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Payment</DialogTitle>
             </DialogHeader>
@@ -454,8 +571,110 @@ export function DocumentsPage() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Payment Reminder</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-md border p-3">
+                <div className="text-sm font-semibold text-foreground">{reminderDoc?.documentNumber}</div>
+                <div className="text-xs text-muted-foreground">
+                  {reminderDoc?.customerName || ''}
+                </div>
+              </div>
+
+              <div>
+                <Label>Mobile (SMS)</Label>
+                <Input
+                  value={reminderTo}
+                  onChange={(e) => setReminderTo(e.target.value)}
+                  placeholder="+91xxxxxxxxxx"
+                />
+              </div>
+
+              <div>
+                <Label>Message</Label>
+                <Textarea
+                  value={reminderMessage}
+                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setReminderMessage(e.target.value)}
+                  rows={5}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button onClick={handleSendSmsReminder} disabled={reminderSending}>
+                  {reminderSending ? 'Sending...' : 'Send SMS (Twilio)'}
+                </Button>
+                <Button type="button" variant="outline" onClick={handleCopyReminder}>
+                  Copy Message
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const to = String(reminderTo || '').trim().replace(/^\+/, '');
+                    const msg = encodeURIComponent(String(reminderMessage || '').trim());
+                    const url = to ? `https://wa.me/${to}?text=${msg}` : `https://wa.me/?text=${msg}`;
+                    window.open(url, '_blank');
+                  }}
+                >
+                  WhatsApp
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const email = String(reminderDoc?.customerEmail || '').trim();
+                    const subject = encodeURIComponent(`Payment reminder - ${String(reminderDoc?.documentNumber || '').trim()}`);
+                    const body = encodeURIComponent(String(reminderMessage || '').trim());
+                    const mailto = `mailto:${email}?subject=${subject}&body=${body}`;
+                    window.location.href = mailto;
+                  }}
+                >
+                  Email
+                </Button>
+              </div>
+
+              {Array.isArray(reminderDoc?.reminderLogs) && reminderDoc.reminderLogs.length > 0 && (
+                <div className="rounded-md border p-3">
+                  <div className="text-sm font-semibold text-foreground mb-2">Reminder History</div>
+                  <div className="space-y-2">
+                    {reminderDoc.reminderLogs
+                      .slice()
+                      .reverse()
+                      .slice(0, 10)
+                      .map((log: any, idx: number) => (
+                        <div key={idx} className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">
+                              {log?.sentAt ? formatDate(log.sentAt) : ''}{log?.to ? ` • ${log.to}` : ''}
+                            </div>
+                            {log?.status === 'failed' && log?.error && (
+                              <div className="text-xs text-red-600 break-words">{String(log.error)}</div>
+                            )}
+                          </div>
+                          <div className={`text-xs font-semibold ${String(log?.status || '') === 'failed' ? 'text-red-600' : 'text-green-600'}`}>
+                            {String(log?.status || 'sent')}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={() => setReminderDialogOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
-          <DialogContent className="max-w-xl">
+          <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Download PDF</DialogTitle>
             </DialogHeader>
@@ -538,10 +757,43 @@ export function DocumentsPage() {
           </Button>
         </div>
 
+        {partyFilter.trim() && (
+          <Card className="mb-6">
+            <CardContent className="py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs text-muted-foreground">Party</div>
+                  <div className="text-base font-semibold text-foreground truncate">{partyFilter.trim()}</div>
+                </div>
+                <div className="text-right">
+                  {partySalesOutstanding > 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">Outstanding</div>
+                      <div className="text-lg font-bold text-orange-600">{formatCurrency(partySalesOutstanding)}</div>
+                    </div>
+                  )}
+                  {partyPurchasePayable > 0 && (
+                    <div className={partySalesOutstanding > 0 ? 'mt-2' : ''}>
+                      <div className="text-xs text-muted-foreground">Payable</div>
+                      <div className="text-lg font-bold text-orange-600">{formatCurrency(partyPurchasePayable)}</div>
+                    </div>
+                  )}
+                  {partySalesOutstanding === 0 && partyPurchasePayable === 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">Balance</div>
+                      <div className="text-lg font-bold text-foreground">{formatCurrency(0)}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Filters */}
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-4 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -551,6 +803,12 @@ export function DocumentsPage() {
                   className="pl-10"
                 />
               </div>
+
+              <Input
+                placeholder="Filter by party name..."
+                value={partyFilter}
+                onChange={(e) => setPartyFilter(e.target.value)}
+              />
 
               <Select value={filterType} onValueChange={setFilterType}>
                 <SelectTrigger>
@@ -609,7 +867,7 @@ export function DocumentsPage() {
             {filteredDocs.map((doc) => (
               <Card key={doc.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-lg font-semibold text-foreground">
@@ -641,19 +899,28 @@ export function DocumentsPage() {
                         )}
                       </div>
                       <div className="grid md:grid-cols-3 gap-2 text-sm text-muted-foreground">
-                        <div>
-                          <span className="font-medium">{doc.type === 'purchase' ? 'Supplier' : 'Customer'}:</span> {doc.customerName || 'N/A'}
-                        </div>
-                        <div>
-                          <span className="font-medium">Date:</span> {formatDate(doc.date)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Amount:</span> {formatCurrency(doc.grandTotal || 0)}
+                        <div className="space-y-1">
+                          <p className="text-muted-foreground">
+                            <span className="font-medium">Customer:</span> {doc.customerName || 'N/A'}
+                          </p>
+                          {(doc.type === 'invoice' || doc.type === 'billing') && doc.lastReminderSentAt && (
+                            <p className="text-xs text-muted-foreground">
+                              Last reminder: {formatDate(doc.lastReminderSentAt)}
+                            </p>
+                          )}
+                          {doc.date && (
+                            <p className="text-muted-foreground">
+                              <span className="font-medium">Date:</span> {formatDate(doc.date)}
+                            </p>
+                          )}
+                          <div>
+                            <span className="font-medium">Amount:</span> {formatCurrency(doc.grandTotal || 0)}
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 ml-4">
+                    <div className="flex items-center gap-2 sm:ml-4 sm:justify-end">
                       <Button
                         variant="outline"
                         size="sm"
@@ -674,10 +941,12 @@ export function DocumentsPage() {
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                             Add Payment
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDuplicate(doc.id)}>
-                            <Copy className="h-4 w-4 mr-2" />
-                            Duplicate
-                          </DropdownMenuItem>
+                          {(doc.type === 'invoice' || doc.type === 'billing') && doc.paymentStatus !== 'paid' && doc.status !== 'draft' && (
+                            <DropdownMenuItem onClick={() => openReminderDialog(doc)}>
+                              <Repeat className="h-4 w-4 mr-2" />
+                              Send Reminder
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => handleConvert(doc.id, 'invoice')}>
                             <Repeat className="h-4 w-4 mr-2" />
                             Convert to Invoice

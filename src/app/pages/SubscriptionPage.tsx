@@ -135,7 +135,7 @@ export function SubscriptionPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Subscription Plans</h1>
@@ -146,7 +146,7 @@ export function SubscriptionPage() {
         {subscription && (
           <Card className={`mb-8 ${isActive ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
             <CardContent className="py-6">
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div className="flex items-start gap-3">
                   {isActive ? (
                     <Check className="h-6 w-6 text-green-600 mt-0.5" />

@@ -170,7 +170,7 @@ export function SuppliersPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <div>
             <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ export function SuppliersPage() {
               >
                 <ChevronLeft className="h-5 w-5" />
               </Button>
-              <h1 className="text-3xl font-bold text-gray-900">Suppliers</h1>
+              <h1 className="text-3xl font-bold text-foreground">Suppliers</h1>
               <Button
                 variant="ghost"
                 size="icon"
@@ -192,7 +192,7 @@ export function SuppliersPage() {
                 <ChevronRight className="h-5 w-5" />
               </Button>
             </div>
-            <p className="text-gray-600 mt-1">Parties</p>
+            <p className="text-muted-foreground mt-1">Parties</p>
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
@@ -322,7 +322,7 @@ export function SuppliersPage() {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search suppliers by name, email, or phone..."
                 value={searchTerm}
@@ -336,11 +336,11 @@ export function SuppliersPage() {
         {filteredSuppliers.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <Building2 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <Building2 className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 {suppliers.length === 0 ? 'No suppliers yet' : 'No matching suppliers'}
               </h3>
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 {suppliers.length === 0
                   ? 'Add your first supplier to get started'
                   : 'Try a different search term'}
@@ -366,7 +366,7 @@ export function SuppliersPage() {
                       <div>
                         <CardTitle className="text-lg">{supplier.name}</CardTitle>
                         {supplier.gstin && (
-                          <p className="text-xs text-gray-600 font-mono">GSTIN: {supplier.gstin}</p>
+                          <p className="text-xs text-muted-foreground font-mono">GSTIN: {supplier.gstin}</p>
                         )}
                       </div>
                     </div>
@@ -376,7 +376,7 @@ export function SuppliersPage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => handleEditClick(supplier)}
-                      className="text-gray-500 hover:text-gray-900"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -384,19 +384,19 @@ export function SuppliersPage() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {supplier.email && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Mail className="h-4 w-4" />
                       <span className="truncate">{supplier.email}</span>
                     </div>
                   )}
                   {supplier.phone && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Phone className="h-4 w-4" />
                       <span>{supplier.phone}</span>
                     </div>
                   )}
                   {supplier.address && (
-                    <div className="flex items-start gap-2 text-sm text-gray-600">
+                    <div className="flex items-start gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-4 w-4 mt-0.5" />
                       <span className="line-clamp-2">{supplier.address}</span>
                     </div>
@@ -524,7 +524,7 @@ export function SuppliersPage() {
         {filteredSuppliers.length > 0 && (
           <Card className="mt-6">
             <CardContent className="py-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Showing {filteredSuppliers.length} of {suppliers.length} suppliers
               </p>
             </CardContent>

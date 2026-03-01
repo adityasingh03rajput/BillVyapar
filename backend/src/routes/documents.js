@@ -4,6 +4,8 @@ import { requireActiveSubscriptionOrAllowReadonlyGet } from '../middleware/subsc
 import { requireProfile } from '../middleware/profile.js';
 import { Counter } from '../models/Counter.js';
 import { Document } from '../models/Document.js';
+import { BusinessProfile } from '../models/BusinessProfile.js';
+import twilio from 'twilio';
 
 export const documentsRouter = Router();
 
@@ -72,6 +74,95 @@ documentsRouter.use(
   requireActiveSubscriptionOrAllowReadonlyGet(['/documents']),
   requireProfile
 );
+
+documentsRouter.post('/:id/remind', async (req, res, next) => {
+  try {
+    const doc = await Document.findOne({ _id: req.params.id, userId: req.userId, profileId: req.profileId });
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const t = String(doc.type || '').toLowerCase();
+    if (t !== 'invoice' && t !== 'billing') {
+      return res.status(400).json({ error: 'Reminders are supported only for Invoice/Billing documents' });
+    }
+
+    if (String(doc.status || '').toLowerCase() === 'draft') {
+      return res.status(400).json({ error: 'Cannot send reminder for draft document' });
+    }
+
+    if (String(doc.paymentStatus || '').toLowerCase() === 'paid') {
+      return res.status(400).json({ error: 'Document is already paid' });
+    }
+
+    const body = req.body || {};
+    const channel = String(body.channel || 'sms').toLowerCase();
+    if (channel !== 'sms') {
+      return res.status(400).json({ error: 'Only SMS reminders are supported via API' });
+    }
+
+    const to = String(body.to || doc.customerMobile || '').trim();
+    if (!to) {
+      return res.status(400).json({ error: 'Customer mobile is required to send SMS' });
+    }
+
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const from = process.env.TWILIO_FROM_NUMBER;
+    if (!accountSid || !authToken || !from) {
+      return res.status(500).json({ error: 'Twilio is not configured (missing TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_FROM_NUMBER)' });
+    }
+
+    const profile = await BusinessProfile.findOne({ _id: req.profileId, userId: req.userId });
+    const template = String(profile?.smsReminderTemplate || '').trim();
+
+    const amount = Number(doc.grandTotal || 0);
+    const due = String(doc.dueDate || '').trim();
+    const invoiceNo = String(doc.documentNumber || '').trim();
+    const party = String(doc.customerName || '').trim();
+    const businessName = String(profile?.businessName || '').trim();
+
+    const defaultMsg = `Payment Reminder: ${party ? party + ', ' : ''}${invoiceNo ? invoiceNo + ', ' : ''}Amount ₹${amount.toFixed(2)}${due ? ` due on ${due}` : ''}. Kindly pay at the earliest.`;
+    const fromTemplate = template
+      ? template
+          .replaceAll('{party}', party)
+          .replaceAll('{docNo}', invoiceNo)
+          .replaceAll('{amount}', amount.toFixed(2))
+          .replaceAll('{dueDate}', due)
+          .replaceAll('{businessName}', businessName)
+      : '';
+
+    const msg = String(body.message || '').trim() || fromTemplate || defaultMsg;
+
+    const client = twilio(accountSid, authToken);
+
+    try {
+      await client.messages.create({ from, to, body: msg });
+      doc.lastReminderSentAt = new Date();
+      doc.reminderLogs = [
+        ...(doc.reminderLogs || []),
+        { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'sent', error: null },
+      ];
+      await doc.save();
+    } catch (e) {
+      const error = e?.message ? String(e.message) : 'Failed to send SMS';
+      doc.reminderLogs = [
+        ...(doc.reminderLogs || []),
+        { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'failed', error },
+      ];
+      await doc.save();
+      return res.status(500).json({ error: error || 'Failed to send SMS' });
+    }
+
+    res.json({
+      ok: true,
+      status: 'sent',
+      lastReminderSentAt: doc.lastReminderSentAt?.toISOString?.() ?? doc.lastReminderSentAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 async function nextDocumentNumber(userId, profileId, type) {
   const counter = await Counter.findOneAndUpdate(

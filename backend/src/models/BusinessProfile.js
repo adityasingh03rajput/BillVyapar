@@ -20,6 +20,8 @@ const businessProfileSchema = new mongoose.Schema(
     accountNumber: { type: String, default: null },
     ifscCode: { type: String, default: null },
     upiId: { type: String, default: null },
+
+    smsReminderTemplate: { type: String, default: null },
     customFields: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }

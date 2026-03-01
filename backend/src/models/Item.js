@@ -9,6 +9,8 @@ const itemSchema = new mongoose.Schema(
     hsnSac: { type: String, default: null },
     unit: { type: String, required: true },
     rate: { type: Number, required: true },
+    sellingPrice: { type: Number, default: null },
+    purchaseCost: { type: Number, default: null },
     discount: { type: Number, default: 0 },
     cgst: { type: Number, required: true },
     sgst: { type: Number, required: true },

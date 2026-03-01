@@ -151,10 +151,10 @@ export function WelcomePage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to BillVyapar</h1>
-          <p className="text-gray-600">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Welcome to BillVyapar</h1>
+          <p className="text-muted-foreground">
             {isActive
               ? 'Subscription active. Continue to create/select your business profile.'
               : 'Choose a subscription plan to get started'}
@@ -176,8 +176,8 @@ export function WelcomePage() {
                   <Zap className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold text-gray-900">₹499</span>
-                  <span className="text-gray-600">/month</span>
+                  <span className="text-4xl font-bold text-foreground">₹499</span>
+                  <span className="text-muted-foreground">/month</span>
                 </div>
                 <CardDescription className="mt-2">Perfect for trying out BillVyapar</CardDescription>
               </CardHeader>
@@ -190,14 +190,14 @@ export function WelcomePage() {
                   {purchasing ? 'Processing...' : 'Get Monthly Plan'}
                 </Button>
                 <div className="space-y-3">
-                  <p className="text-sm font-semibold text-gray-700 mb-3">Everything included:</p>
+                  <p className="text-sm font-semibold text-foreground/80 mb-3">Everything included:</p>
                   {features.slice(0, 6).map((feature, index) => (
                     <div key={index} className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-gray-700">{feature}</span>
+                      <span className="text-sm text-foreground/80">{feature}</span>
                     </div>
                   ))}
-                  <p className="text-xs text-gray-500 pt-2">+ 6 more features...</p>
+                  <p className="text-xs text-muted-foreground pt-2">+ 6 more features...</p>
                 </div>
               </CardContent>
             </Card>
@@ -215,8 +215,8 @@ export function WelcomePage() {
                   <Crown className="h-6 w-6 text-green-600" />
                 </div>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold text-gray-900">₹4,999</span>
-                  <span className="text-gray-600">/year</span>
+                  <span className="text-4xl font-bold text-foreground">₹4,999</span>
+                  <span className="text-muted-foreground">/year</span>
                 </div>
                 <CardDescription className="mt-2">Save ₹999 compared to monthly billing</CardDescription>
               </CardHeader>
@@ -229,11 +229,11 @@ export function WelcomePage() {
                   {purchasing ? 'Processing...' : 'Get Yearly Plan'}
                 </Button>
                 <div className="space-y-3">
-                  <p className="text-sm font-semibold text-gray-700 mb-3">All features included:</p>
+                  <p className="text-sm font-semibold text-foreground/80 mb-3">All features included:</p>
                   {features.map((feature, index) => (
                     <div key={index} className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-gray-700">{feature}</span>
+                      <span className="text-sm text-foreground/80">{feature}</span>
                     </div>
                   ))}
                 </div>

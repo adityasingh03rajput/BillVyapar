@@ -42,6 +42,8 @@ interface DocumentItem {
   quantity: number;
   unit: string;
   rate: number;
+  sellingPrice?: number;
+  purchaseCost?: number;
   currency: CurrencyCode;
   discount: number;
   cgst: number;
@@ -67,6 +69,8 @@ interface PresetItem {
   hsnSac?: string;
   unit: string;
   rate: number;
+  sellingPrice?: number;
+  purchaseCost?: number;
   discount?: number;
   cgst: number;
   sgst: number;
@@ -107,6 +111,8 @@ export function CreateDocumentPage() {
     quantity: 1,
     unit: 'pcs',
     rate: 0,
+    sellingPrice: 0,
+    purchaseCost: 0,
     currency: 'INR',
     discount: 0,
     cgst: 9,
@@ -674,6 +680,11 @@ export function CreateDocumentPage() {
     const found = presetItems.find(i => (i.name || '').toLowerCase() === name.toLowerCase());
     if (!found) return;
 
+    const isPurchaseDoc = String(type || '').toLowerCase() === 'purchase' || partyKind === 'supplier';
+    const nextRate = isPurchaseDoc
+      ? (typeof found.purchaseCost === 'number' ? found.purchaseCost : found.rate)
+      : (typeof found.sellingPrice === 'number' ? found.sellingPrice : found.rate);
+
     const newItems = [...items];
     const prev = newItems[index];
     newItems[index] = {
@@ -681,7 +692,9 @@ export function CreateDocumentPage() {
       name: found.name,
       hsnSac: found.hsnSac || '',
       unit: found.unit || prev.unit,
-      rate: typeof found.rate === 'number' ? found.rate : prev.rate,
+      rate: typeof nextRate === 'number' ? nextRate : prev.rate,
+      sellingPrice: typeof found.sellingPrice === 'number' ? found.sellingPrice : prev.sellingPrice,
+      purchaseCost: typeof found.purchaseCost === 'number' ? found.purchaseCost : prev.purchaseCost,
       discount: typeof found.discount === 'number' ? found.discount : prev.discount,
       cgst: typeof found.cgst === 'number' ? found.cgst : prev.cgst,
       sgst: typeof found.sgst === 'number' ? found.sgst : prev.sgst,
@@ -701,6 +714,8 @@ export function CreateDocumentPage() {
       quantity: 1,
       unit: 'pcs',
       rate: 0,
+      sellingPrice: 0,
+      purchaseCost: 0,
       currency: 'INR',
       discount: 0,
       cgst: 9,
@@ -726,6 +741,8 @@ export function CreateDocumentPage() {
         quantity: 1,
         unit: 'pcs',
         rate: 0,
+        sellingPrice: 0,
+        purchaseCost: 0,
         currency: 'INR',
         discount: 0,
         cgst: 9,
@@ -933,10 +950,10 @@ export function CreateDocumentPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="rounded-xl border bg-gradient-to-r from-blue-50 to-green-50 dark:from-card dark:to-background p-4 mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <Button
                 variant="outline"
@@ -947,7 +964,7 @@ export function CreateDocumentPage() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div>
-                <h1 className="text-3xl font-bold text-foreground">
+                <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
                   {isEdit ? 'Edit Document' : 'Create Document'}
                 </h1>
                 <p className="text-muted-foreground mt-1">Fill in the details below</p>
@@ -957,7 +974,7 @@ export function CreateDocumentPage() {
               onClick={handleSave}
               disabled={saving}
               data-tour-id="cta-save-document"
-              className="bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 shadow-sm"
+              className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 shadow-sm"
             >
               <Save className="h-4 w-4 mr-2" />
               {saving ? 'Saving...' : 'Save Document'}
@@ -971,7 +988,7 @@ export function CreateDocumentPage() {
             <CardTitle>Document Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <Label>Document Type</Label>
                 <Select value={type} onValueChange={handleTypeChange}>
@@ -991,7 +1008,7 @@ export function CreateDocumentPage() {
               </div>
 
               {(type === 'invoice_cancellation' || type === 'order') && (
-                <div className="md:col-span-2">
+                <div className="sm:col-span-2">
                   <Label>
                     {type === 'order' ? 'Reference Quotation (optional)' : 'Reference Invoice *'}
                   </Label>
@@ -1097,7 +1114,7 @@ export function CreateDocumentPage() {
                     Document Details
                   </AccordionTrigger>
                   <AccordionContent>
-                    <div className="grid md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <Label>Invoice No</Label>
                         <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
@@ -1112,7 +1129,7 @@ export function CreateDocumentPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid md:grid-cols-3 gap-4">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <Label>Transport</Label>
                         <Input value={transport} onChange={(e) => setTransport(e.target.value)} />
@@ -1142,7 +1159,7 @@ export function CreateDocumentPage() {
                     {type === 'order' ? 'Order Fields' : 'Quotation Fields'}
                   </AccordionTrigger>
                   <AccordionContent>
-                    <div className="grid md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <Label>Order Number</Label>
                         <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
@@ -1158,7 +1175,7 @@ export function CreateDocumentPage() {
                     </div>
 
                     {type === 'quotation' && (
-                      <div className="mt-4 grid md:grid-cols-3 gap-4">
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
                           <Label>Place of Supply</Label>
                           <Input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} />
@@ -1168,7 +1185,7 @@ export function CreateDocumentPage() {
                       </div>
                     )}
 
-                    <div className="mt-4 grid md:grid-cols-3 gap-4">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <Label>Purchase Order No. (PO No.)</Label>
                         <Input value={purchaseOrderNo} onChange={(e) => setPurchaseOrderNo(e.target.value)} />
@@ -1180,8 +1197,8 @@ export function CreateDocumentPage() {
                       <div />
                     </div>
 
-                    <div className="mt-6 grid md:grid-cols-3 gap-4">
-                      <div className="md:col-span-2">
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="sm:col-span-2">
                         <Label>Delivery Address</Label>
                         <Textarea
                           value={deliveryAddress}
@@ -1200,8 +1217,8 @@ export function CreateDocumentPage() {
                       <>
                         <div className="mt-6">
                           <div className="text-sm font-semibold text-foreground">Departure From</div>
-                          <div className="mt-2 grid md:grid-cols-4 gap-4">
-                            <div className="md:col-span-2">
+                          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="sm:col-span-2">
                               <Label>Address</Label>
                               <Textarea
                                 value={departureFromAddress}
@@ -1219,19 +1236,19 @@ export function CreateDocumentPage() {
                               <Input value={departureFromCity} onChange={(e) => setDepartureFromCity(e.target.value)} />
                             </div>
                           </div>
-                          <div className="mt-4 grid md:grid-cols-4 gap-4">
+                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                               <Label>State</Label>
                               <Input value={departureFromState} onChange={(e) => setDepartureFromState(e.target.value)} />
                             </div>
-                            <div className="md:col-span-3" />
+                            <div className="sm:col-span-1 lg:col-span-3" />
                           </div>
                         </div>
 
                         <div className="mt-6">
                           <div className="text-sm font-semibold text-foreground">Departure To</div>
-                          <div className="mt-2 grid md:grid-cols-4 gap-4">
-                            <div className="md:col-span-2">
+                          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="sm:col-span-2">
                               <Label>Address</Label>
                               <Textarea
                                 value={departureToAddress}
@@ -1249,18 +1266,18 @@ export function CreateDocumentPage() {
                               <Input value={departureToCity} onChange={(e) => setDepartureToCity(e.target.value)} />
                             </div>
                           </div>
-                          <div className="mt-4 grid md:grid-cols-4 gap-4">
+                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                               <Label>State</Label>
                               <Input value={departureToState} onChange={(e) => setDepartureToState(e.target.value)} />
                             </div>
-                            <div className="md:col-span-3" />
+                            <div className="sm:col-span-1 lg:col-span-3" />
                           </div>
                         </div>
                       </>
                     )}
 
-                    <div className="mt-4 grid md:grid-cols-3 gap-4">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <Label>Expected Delivery Date</Label>
                         <Input
@@ -1273,7 +1290,7 @@ export function CreateDocumentPage() {
                       <div />
                     </div>
 
-                    <div className="mt-6 grid md:grid-cols-4 gap-4">
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <Label>Payment Terms</Label>
                         <Input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
@@ -1282,13 +1299,13 @@ export function CreateDocumentPage() {
                         <Label>Credit Period</Label>
                         <Input value={creditPeriod} onChange={(e) => setCreditPeriod(e.target.value)} />
                       </div>
-                      <div className="md:col-span-2">
+                      <div className="sm:col-span-2">
                         <Label>Late Fee Terms</Label>
                         <Input value={lateFeeTerms} onChange={(e) => setLateFeeTerms(e.target.value)} />
                       </div>
                     </div>
 
-                    <div className="mt-4 grid md:grid-cols-4 gap-4">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <Label>Packing/Handling Charges</Label>
                         <Input
@@ -1309,10 +1326,10 @@ export function CreateDocumentPage() {
                           step="0.01"
                         />
                       </div>
-                      <div className="md:col-span-2" />
+                      <div className="sm:col-span-2" />
                     </div>
 
-                    <div className="mt-6 grid md:grid-cols-2 gap-4">
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label>Internal Notes</Label>
                         <Textarea
@@ -1349,7 +1366,7 @@ export function CreateDocumentPage() {
                   Bank / UPI Details
                 </AccordionTrigger>
                 <AccordionContent>
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Bank Name</Label>
                       <Input value={bankName} onChange={(e) => setBankName(e.target.value)} />
@@ -1359,7 +1376,7 @@ export function CreateDocumentPage() {
                       <Input value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} />
                     </div>
                   </div>
-                  <div className="mt-4 grid md:grid-cols-2 gap-4">
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Account Number</Label>
                       <Input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} />
@@ -1369,7 +1386,7 @@ export function CreateDocumentPage() {
                       <Input value={bankIfsc} onChange={(e) => setBankIfsc(e.target.value)} />
                     </div>
                   </div>
-                  <div className="mt-4 grid md:grid-cols-2 gap-4">
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>UPI ID</Label>
                       <Input value={upiId} onChange={(e) => setUpiId(e.target.value)} />
@@ -1535,8 +1552,8 @@ export function CreateDocumentPage() {
                     className="rounded-lg border bg-card shadow-sm transition-shadow hover:shadow-md"
                   >
                     <div id={`doc-item-${index}`} className="p-3">
-                      <div className="grid grid-cols-12 gap-3 items-center">
-                        <div className="col-span-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start sm:items-center">
+                        <div className="sm:col-span-5">
                           <Label className="text-xs text-muted-foreground">Product/Service</Label>
                           <Input
                             value={item.name}
@@ -1555,7 +1572,8 @@ export function CreateDocumentPage() {
                           </datalist>
                         </div>
 
-                        <div className="col-span-2">
+                        <div className="grid grid-cols-2 gap-3 sm:contents">
+                          <div className="sm:col-span-2">
                           <Label className="text-xs text-muted-foreground">Qty</Label>
                           <Input
                             type="number"
@@ -1565,7 +1583,7 @@ export function CreateDocumentPage() {
                           />
                         </div>
 
-                        <div className="col-span-3">
+                          <div className="sm:col-span-3">
                           <Label className="text-xs text-muted-foreground">Rate</Label>
                           <div className="flex items-center">
                             <Input
@@ -1593,37 +1611,40 @@ export function CreateDocumentPage() {
                           </div>
                         </div>
 
-                        <div className="col-span-1 text-right">
-                          <div className="text-xs text-muted-foreground">Total</div>
-                          <div className="font-semibold text-primary">
-                            {currencySymbol(item.currency)}{item.total.toFixed(2)}
-                          </div>
-                        </div>
+                          <div className="flex items-center justify-between gap-3 sm:col-span-4 sm:justify-end">
+                            <div className="sm:text-right">
+                              <div className="text-xs text-muted-foreground">Total</div>
+                              <div className="font-semibold text-primary">
+                                {currencySymbol(item.currency)}{item.total.toFixed(2)}
+                              </div>
+                            </div>
 
-                        <div className="col-span-1 flex justify-end gap-1">
-                          <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="icon" className="neon-target neon-hover transition-all hover:text-primary">
-                              {isOpen ? (
-                                <ChevronUp className={`h-4 w-4 transition-all`} />
-                              ) : (
-                                <ChevronDown className={`h-4 w-4 transition-all`} />
-                              )}
-                            </Button>
-                          </CollapsibleTrigger>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeItem(index)}
-                            className="neon-target neon-hover transition-all"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
+                            <div className="flex items-center gap-1">
+                              <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="icon" className="neon-target neon-hover transition-all hover:text-primary">
+                                  {isOpen ? (
+                                    <ChevronUp className={`h-4 w-4 transition-all`} />
+                                  ) : (
+                                    <ChevronDown className={`h-4 w-4 transition-all`} />
+                                  )}
+                                </Button>
+                              </CollapsibleTrigger>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeItem(index)}
+                                className="neon-target neon-hover transition-all"
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
                       <CollapsibleContent>
-                        <div className="mt-4 grid grid-cols-12 gap-3 rounded-md bg-muted/40 p-3 transition-all duration-300 ease-out">
-                          <div className="col-span-12">
+                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-12 gap-3 rounded-md bg-muted/40 p-3 transition-all duration-300 ease-out">
+                          <div className="sm:col-span-12">
                             <Label className="text-xs text-muted-foreground">Item Description</Label>
                             <Textarea
                               value={item.description || ''}
@@ -1633,7 +1654,7 @@ export function CreateDocumentPage() {
                             />
                           </div>
 
-                          <div className="col-span-6">
+                          <div className="sm:col-span-6">
                             <Label className="text-xs text-muted-foreground">Item Code / SKU</Label>
                             <Input
                               value={item.sku || ''}
@@ -1642,7 +1663,7 @@ export function CreateDocumentPage() {
                             />
                           </div>
 
-                          <div className="col-span-6">
+                          <div className="sm:col-span-6">
                             <Label className="text-xs text-muted-foreground">Service Period</Label>
                             <Input
                               value={item.servicePeriod || ''}
@@ -1651,7 +1672,7 @@ export function CreateDocumentPage() {
                             />
                           </div>
 
-                          <div className="col-span-3">
+                          <div className="sm:col-span-3">
                             <Label className="text-xs text-muted-foreground">HSN/SAC</Label>
                             <Input
                               value={item.hsnSac}
@@ -1660,7 +1681,7 @@ export function CreateDocumentPage() {
                             />
                           </div>
 
-                          <div className="col-span-2">
+                          <div className="sm:col-span-2">
                             <Label className="text-xs text-muted-foreground">Unit</Label>
                             <Select value={item.unit} onValueChange={(v) => updateItem(index, 'unit', v)}>
                               <SelectTrigger>
@@ -1676,7 +1697,7 @@ export function CreateDocumentPage() {
                             </Select>
                           </div>
 
-                          <div className="col-span-2">
+                          <div className="sm:col-span-2">
                             <Label className="text-xs text-muted-foreground">Disc%</Label>
                             <Input
                               type="number"
@@ -1687,8 +1708,8 @@ export function CreateDocumentPage() {
                             />
                           </div>
 
-                          <div className="col-span-5">
-                            <div className="grid grid-cols-3 gap-3">
+                          <div className="sm:col-span-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
                                 <Label className="text-xs text-muted-foreground">CGST%</Label>
                                 <Input
@@ -1728,7 +1749,7 @@ export function CreateDocumentPage() {
           </CardContent>
         </Card>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Additional Details */}
           <Card>
             <CardHeader>
@@ -1880,7 +1901,7 @@ export function CreateDocumentPage() {
           </Card>
         </div>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="hidden sm:flex mt-6 justify-end gap-3">
           <Button variant="outline" onClick={() => navigate('/documents')}>
             Cancel
           </Button>
@@ -1888,6 +1909,30 @@ export function CreateDocumentPage() {
             <Save className="h-4 w-4 mr-2" />
             {saving ? 'Saving...' : 'Save Document'}
           </Button>
+        </div>
+
+        <div className="h-24 sm:hidden" aria-hidden />
+
+        <div className="sm:hidden fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">Grand Total</div>
+                <div className="text-base font-bold text-foreground truncate">
+                  {primarySymbol}{totals.grandTotal.toFixed(2)}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => navigate('/documents')}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={saving}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {saving ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </AppLayout>

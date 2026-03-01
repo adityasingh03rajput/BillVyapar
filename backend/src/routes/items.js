@@ -43,3 +43,27 @@ itemsRouter.get('/', async (req, res, next) => {
     next(err);
   }
 });
+
+itemsRouter.put('/:id', async (req, res, next) => {
+  try {
+    const data = req.body || {};
+    const item = await Item.findOne({ _id: req.params.id, userId: req.userId, profileId: req.profileId });
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    Object.assign(item, data);
+    await item.save();
+
+    res.json({
+      id: String(item._id),
+      ...item.toObject(),
+      _id: undefined,
+      userId: undefined,
+      createdAt: item.createdAt?.toISOString?.() ?? item.createdAt,
+      updatedAt: item.updatedAt?.toISOString?.() ?? item.updatedAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
