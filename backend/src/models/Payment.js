@@ -8,6 +8,7 @@ const paymentSchema = new mongoose.Schema(
     // Optional linkage
     documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', required: false, index: true, default: null },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: false, index: true, default: null },
+    supplierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: false, index: true, default: null },
 
     amount: { type: Number, required: true },
     currency: { type: String, default: 'INR' },

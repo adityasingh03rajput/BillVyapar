@@ -490,6 +490,8 @@ export function DocumentsPage() {
         },
         body: JSON.stringify({
           documentId: paymentDoc.id,
+          customerId: paymentDoc?.customerId || null,
+          supplierId: paymentDoc?.supplierId || null,
           amount: amt,
           date,
           method: paymentMethod || null,

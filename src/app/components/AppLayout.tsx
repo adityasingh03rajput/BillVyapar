@@ -270,6 +270,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { icon: Package, label: 'Items', path: '/items' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: Receipt, label: 'GST Reports', path: '/reports/gst' },
+    { icon: CreditCard, label: 'Ledger', path: '/ledger' },
     { icon: CreditCard, label: 'Subscription', path: '/subscription' },
   ];
 
@@ -280,6 +281,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (path === '/items') return 'nav-items';
     if (path === '/analytics') return 'nav-analytics';
     if (path === '/reports/gst') return 'nav-gst';
+    if (path === '/ledger') return 'nav-ledger';
     if (path === '/subscription') return 'nav-subscription';
     return undefined;
   };

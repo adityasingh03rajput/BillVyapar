@@ -16,6 +16,7 @@ import { subscriptionRouter } from './routes/subscription.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { paymentsRouter } from './routes/payments.js';
 import { reportsRouter } from './routes/reports.js';
+import { ledgerRouter } from './routes/ledger.js';
 import twilio from 'twilio';
 import { Document } from './models/Document.js';
 import { BusinessProfile } from './models/BusinessProfile.js';
@@ -56,6 +57,7 @@ app.use('/subscription', subscriptionRouter);
 app.use('/analytics', analyticsRouter);
 app.use('/payments', paymentsRouter);
 app.use('/reports', reportsRouter);
+app.use('/ledger', ledgerRouter);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

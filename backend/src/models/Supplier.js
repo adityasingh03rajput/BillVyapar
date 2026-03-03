@@ -21,6 +21,9 @@ const supplierSchema = new mongoose.Schema(
     accountNumber: { type: String, default: null },
     ifscCode: { type: String, default: null },
     upiId: { type: String, default: null },
+
+    openingBalance: { type: Number, default: 0 },
+    openingBalanceType: { type: String, enum: ['dr', 'cr'], default: 'cr' },
   },
   { timestamps: true }
 );

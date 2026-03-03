@@ -133,9 +133,14 @@ export function CreateDocumentPage() {
   const [invoiceNo, setInvoiceNo] = useState('');
   const [challanNo, setChallanNo] = useState('');
   const [ewayBillNo, setEwayBillNo] = useState('');
+  const [ewayBillDate, setEwayBillDate] = useState('');
+  const [ewayBillValidUpto, setEwayBillValidUpto] = useState('');
+  const [ewayBillVehicleNo, setEwayBillVehicleNo] = useState('');
+  const [ewayBillTransporterName, setEwayBillTransporterName] = useState('');
+  const [ewayBillTransporterDocNo, setEwayBillTransporterDocNo] = useState('');
+  const [ewayBillDistanceKm, setEwayBillDistanceKm] = useState('');
   const [transport, setTransport] = useState('');
   const [transportId, setTransportId] = useState('');
-  const [placeOfSupply, setPlaceOfSupply] = useState('');
 
   const [orderNumber, setOrderNumber] = useState('');
   const [revisionNumber, setRevisionNumber] = useState('');
@@ -187,6 +192,7 @@ export function CreateDocumentPage() {
 
   const [partyKind, setPartyKind] = useState<'customer' | 'supplier'>('customer');
   const [lastCustomerDocType, setLastCustomerDocType] = useState<string>('invoice');
+  const [partyId, setPartyId] = useState<string>('');
 
   const [expandedItemRows, setExpandedItemRows] = useState<Record<number, boolean>>({});
 
@@ -200,7 +206,25 @@ export function CreateDocumentPage() {
   };
 
   const apiUrl = API_URL;
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
+  const readCurrentProfile = () => {
+    const raw = localStorage.getItem('currentProfile');
+    if (!raw) return {} as any;
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'string') {
+        try {
+          return JSON.parse(parsed);
+        } catch {
+          return {} as any;
+        }
+      }
+      return parsed || ({} as any);
+    } catch {
+      return {} as any;
+    }
+  };
+
+  const currentProfile = readCurrentProfile();
   const profileId = currentProfile?.id;
 
   useEffect(() => {
@@ -208,6 +232,23 @@ export function CreateDocumentPage() {
       loadDocument();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (isEdit) return;
+
+    const nextBankName = String(currentProfile?.bankName || '').trim();
+    const nextBranch = String(currentProfile?.bankBranch || '').trim();
+    const nextAcc = String(currentProfile?.accountNumber || '').trim();
+    const nextIfsc = String(currentProfile?.ifscCode || '').trim();
+    const nextUpi = String(currentProfile?.upiId || '').trim();
+
+    if (!bankName && nextBankName) setBankName(nextBankName);
+    if (!bankBranch && nextBranch) setBankBranch(nextBranch);
+    if (!bankAccountNumber && nextAcc) setBankAccountNumber(nextAcc);
+    if (!bankIfsc && nextIfsc) setBankIfsc(nextIfsc);
+    if (!upiId && nextUpi) setUpiId(nextUpi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, profileId]);
 
   useEffect(() => {
     if (type === 'purchase') {
@@ -427,7 +468,6 @@ export function CreateDocumentPage() {
     if (!customerEmail.trim() && doc.customerEmail) setCustomerEmail(String(doc.customerEmail || '').trim());
 
     if (!customerStateCode.trim() && doc.customerStateCode) setCustomerStateCode(String(doc.customerStateCode || '').trim());
-    if (!placeOfSupply.trim() && doc.placeOfSupply) setPlaceOfSupply(String(doc.placeOfSupply || '').trim());
 
     if (!deliveryAddress.trim() && doc.deliveryAddress) setDeliveryAddress(String(doc.deliveryAddress || '').trim());
     if (!deliveryMethod.trim() && doc.deliveryMethod) setDeliveryMethod(String(doc.deliveryMethod || '').trim());
@@ -471,17 +511,9 @@ export function CreateDocumentPage() {
 
     if (type === 'order') {
       if (!customerName.trim() && inv.customerName) setCustomerName(inv.customerName || '');
-      if (!customerAddress.trim() && inv.customerAddress) setCustomerAddress(inv.customerAddress || '');
-      if (!customerGstin.trim() && inv.customerGstin) setCustomerGstin(inv.customerGstin || '');
-
-      const inferredState = gstStateCode(inv.customerGstin || '');
-      if (!customerStateCode.trim() && inferredState) setCustomerStateCode(inferredState);
-      if (!placeOfSupply.trim() && inferredState) setPlaceOfSupply(inferredState);
-      if (!deliveryAddress.trim() && inv.customerAddress) setDeliveryAddress(String(inv.customerAddress || '').trim());
-
       try {
         const headers = {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
           'X-Profile-ID': profileId,
         };
@@ -520,6 +552,9 @@ export function CreateDocumentPage() {
         setDate(doc.date || '');
         setDueDate(doc.dueDate || '');
 
+        const nextPartyId = String(doc.customerId || doc.supplierId || '').trim();
+        setPartyId(nextPartyId);
+
         setReferenceDocumentId(doc.referenceDocumentId || null);
         setReferenceDocumentNumber(doc.referenceDocumentNumber || '');
 
@@ -537,9 +572,14 @@ export function CreateDocumentPage() {
         setInvoiceNo(doc.invoiceNo || '');
         setChallanNo(doc.challanNo || '');
         setEwayBillNo(doc.ewayBillNo || '');
+        setEwayBillDate(doc.ewayBillDate || '');
+        setEwayBillValidUpto(doc.ewayBillValidUpto || '');
+        setEwayBillVehicleNo(doc.ewayBillVehicleNo || '');
+        setEwayBillTransporterName(doc.ewayBillTransporterName || '');
+        setEwayBillTransporterDocNo(doc.ewayBillTransporterDocNo || '');
+        setEwayBillDistanceKm(String(doc.ewayBillDistanceKm ?? ''));
         setTransport(doc.transport || '');
         setTransportId(doc.transportId || '');
-        setPlaceOfSupply(doc.placeOfSupply || '');
 
         setOrderNumber(doc.orderNumber || '');
         setRevisionNumber(doc.revisionNumber || '');
@@ -631,7 +671,12 @@ export function CreateDocumentPage() {
 
   const tryApplyPresetCustomerEnhanced = (name: string) => {
     const found = presetCustomers.find(c => (c.name || '').toLowerCase() === name.toLowerCase());
-    if (!found) return;
+    if (!found) {
+      setPartyId('');
+      return;
+    }
+
+    setPartyId(found.id || '');
 
     setCustomerName(found.name || '');
 
@@ -672,7 +717,6 @@ export function CreateDocumentPage() {
 
       const inferredState = gstStateCode(nextGstin || customerGstin);
       if (!customerStateCode.trim() && inferredState) setCustomerStateCode(inferredState);
-      if (!placeOfSupply.trim() && inferredState) setPlaceOfSupply(inferredState);
     }
   };
 
@@ -824,14 +868,17 @@ export function CreateDocumentPage() {
         date,
         dueDate,
 
+        customerId: partyKind === 'customer' ? (partyId || null) : null,
+        supplierId: partyKind === 'supplier' ? (partyId || null) : null,
+
         referenceDocumentId,
         referenceDocumentNumber,
 
         orderNumber,
-        revisionNumber,
-        referenceNo,
-        purchaseOrderNo,
-        poDate,
+        revisionNumber: type === 'order' ? revisionNumber : null,
+        referenceNo: type === 'order' ? referenceNo : null,
+        purchaseOrderNo: type === 'order' ? purchaseOrderNo : null,
+        poDate: type === 'order' ? poDate : null,
 
         customerContactPerson,
         customerMobile,
@@ -855,9 +902,14 @@ export function CreateDocumentPage() {
         invoiceNo,
         challanNo,
         ewayBillNo,
+        ewayBillDate,
+        ewayBillValidUpto,
+        ewayBillVehicleNo,
+        ewayBillTransporterName,
+        ewayBillTransporterDocNo,
+        ewayBillDistanceKm: ewayBillDistanceKm ? Number(ewayBillDistanceKm) : 0,
         transport,
         transportId,
-        placeOfSupply,
 
         bankName,
         bankBranch,
@@ -1123,10 +1175,7 @@ export function CreateDocumentPage() {
                         <Label>Challan No</Label>
                         <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} />
                       </div>
-                      <div>
-                        <Label>E-way Bill No</Label>
-                        <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} />
-                      </div>
+                      <div />
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1138,14 +1187,63 @@ export function CreateDocumentPage() {
                         <Label>Transport ID</Label>
                         <Input value={transportId} onChange={(e) => setTransportId(e.target.value)} />
                       </div>
-                      <div>
-                        <Label>Place of Supply</Label>
-                        <Input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} />
-                      </div>
+                      <div />
                     </div>
                   </AccordionContent>
                 </AccordionItem>
               )}
+
+              <AccordionItem value="eway-bill-details">
+                <AccordionTrigger
+                  onClick={(e) => {
+                    const target = e.currentTarget as unknown as HTMLElement;
+                    window.setTimeout(() => smoothPanTo(target), 50);
+                  }}
+                  className="neon-target neon-hover transition-all hover:text-primary"
+                >
+                  E-way Bill Details
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <Label>E-way Bill No</Label>
+                      <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>E-way Bill Date</Label>
+                      <Input type="date" value={ewayBillDate} onChange={(e) => setEwayBillDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Valid Upto</Label>
+                      <Input type="date" value={ewayBillValidUpto} onChange={(e) => setEwayBillValidUpto(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Vehicle No.</Label>
+                      <Input value={ewayBillVehicleNo} onChange={(e) => setEwayBillVehicleNo(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Transporter Name</Label>
+                      <Input value={ewayBillTransporterName} onChange={(e) => setEwayBillTransporterName(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Transporter Doc No.</Label>
+                      <Input value={ewayBillTransporterDocNo} onChange={(e) => setEwayBillTransporterDocNo(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Distance (KM)</Label>
+                      <Input value={ewayBillDistanceKm} onChange={(e) => setEwayBillDistanceKm(e.target.value)} />
+                    </div>
+                    <div />
+                    <div />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
 
               {(type === 'quotation' || type === 'order') && (
                 <AccordionItem value="quotation-fields">
@@ -1164,38 +1262,38 @@ export function CreateDocumentPage() {
                         <Label>Order Number</Label>
                         <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
                       </div>
-                      <div>
-                        <Label>Revision Number / Re-Order No.</Label>
-                        <Input value={revisionNumber} onChange={(e) => setRevisionNumber(e.target.value)} />
-                      </div>
-                      <div>
-                        <Label>Reference No.</Label>
-                        <Input value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} />
-                      </div>
+                      {type === 'order' ? (
+                        <>
+                          <div>
+                            <Label>Revision Number / Re-Order No.</Label>
+                            <Input value={revisionNumber} onChange={(e) => setRevisionNumber(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label>Reference No.</Label>
+                            <Input value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div />
+                          <div />
+                        </>
+                      )}
                     </div>
 
-                    {type === 'quotation' && (
+                    {type === 'order' && (
                       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
-                          <Label>Place of Supply</Label>
-                          <Input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} />
+                          <Label>Purchase Order No. (PO No.)</Label>
+                          <Input value={purchaseOrderNo} onChange={(e) => setPurchaseOrderNo(e.target.value)} />
                         </div>
-                        <div />
+                        <div>
+                          <Label>PO Date</Label>
+                          <Input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
+                        </div>
                         <div />
                       </div>
                     )}
-
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div>
-                        <Label>Purchase Order No. (PO No.)</Label>
-                        <Input value={purchaseOrderNo} onChange={(e) => setPurchaseOrderNo(e.target.value)} />
-                      </div>
-                      <div>
-                        <Label>PO Date</Label>
-                        <Input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
-                      </div>
-                      <div />
-                    </div>
 
                     <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div className="sm:col-span-2">

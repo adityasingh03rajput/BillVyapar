@@ -128,3 +128,63 @@ export async function exportElementToPdf(params: {
 
   pdf.save(filename);
 }
+
+export async function exportHtmlPagesToPdf(params: {
+  pages: HTMLElement[];
+  filename: string;
+}) {
+  const { pages, filename } = params;
+  const valid = (pages || []).filter(Boolean);
+  if (valid.length === 0) {
+    throw new Error('No pages to export');
+  }
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+
+  const pdf = new jsPDF({
+    orientation: 'p',
+    unit: 'pt',
+    format: 'a4',
+  });
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  for (let i = 0; i < valid.length; i += 1) {
+    const el = valid[i];
+    const canvas = await html2canvas(el, {
+      scale: Math.max(2, window.devicePixelRatio || 1),
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      onclone: (clonedDoc) => {
+        try {
+          clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach((n) => n.remove());
+          const nodes = clonedDoc.body.querySelectorAll<HTMLElement>('*');
+          nodes.forEach((n) => {
+            normalizeElementColors(clonedDoc, n);
+          });
+        } catch {
+          // ignore
+        }
+      },
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const y = Math.max(0, (pageHeight - imgHeight) / 2);
+
+    if (i > 0) pdf.addPage();
+    pdf.addImage(imgData, 'PNG', 0, y, imgWidth, imgHeight, undefined, 'FAST');
+
+    const label = `${i + 1}/${valid.length}`;
+    pdf.setFontSize(9);
+    pdf.setTextColor(120);
+    pdf.text(label, pageWidth - 36, pageHeight - 18, { align: 'right' });
+  }
+
+  pdf.save(filename);
+}

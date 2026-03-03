@@ -45,6 +45,9 @@ const documentSchema = new mongoose.Schema(
     referenceDocumentId: { type: String, default: null },
     referenceDocumentNumber: { type: String, default: null },
 
+    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: false, index: true, default: null },
+    supplierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: false, index: true, default: null },
+
     customerName: { type: String, default: null },
     customerAddress: { type: String, default: null },
     customerGstin: { type: String, default: null },
@@ -63,6 +66,12 @@ const documentSchema = new mongoose.Schema(
     invoiceNo: { type: String, default: null },
     challanNo: { type: String, default: null },
     ewayBillNo: { type: String, default: null },
+    ewayBillDate: { type: String, default: null },
+    ewayBillValidUpto: { type: String, default: null },
+    ewayBillVehicleNo: { type: String, default: null },
+    ewayBillTransporterName: { type: String, default: null },
+    ewayBillTransporterDocNo: { type: String, default: null },
+    ewayBillDistanceKm: { type: Number, default: 0 },
     transport: { type: String, default: null },
     transportId: { type: String, default: null },
     placeOfSupply: { type: String, default: null },

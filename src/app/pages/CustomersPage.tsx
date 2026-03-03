@@ -30,6 +30,8 @@ interface Customer {
   shippingPostalCode?: string;
   gstin?: string;
   pan?: string;
+  openingBalance?: number;
+  openingBalanceType?: 'dr' | 'cr';
 }
 
 export function CustomersPage() {
@@ -459,6 +461,32 @@ export function CustomersPage() {
                       />
                     </div>
                   </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Opening Balance</Label>
+                      <Input
+                        value={String(formData.openingBalance ?? '')}
+                        onChange={(e) => setFormData({ ...formData, openingBalance: Number(e.target.value || 0) })}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <Label>Opening Type</Label>
+                      <Select
+                        value={String(formData.openingBalanceType || 'dr')}
+                        onValueChange={(value) => setFormData({ ...formData, openingBalanceType: value as 'dr' | 'cr' })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="DR" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dr">DR (Receivable)</SelectItem>
+                          <SelectItem value="cr">CR (Payable)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <Label>Phone</Label>
@@ -767,6 +795,32 @@ export function CustomersPage() {
                     onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
                     placeholder="customer@email.com"
                   />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Opening Balance</Label>
+                  <Input
+                    value={String(editFormData.openingBalance ?? '')}
+                    onChange={(e) => setEditFormData({ ...editFormData, openingBalance: Number(e.target.value || 0) })}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <Label>Opening Type</Label>
+                  <Select
+                    value={String(editFormData.openingBalanceType || 'dr')}
+                    onValueChange={(value) => setEditFormData({ ...editFormData, openingBalanceType: value as 'dr' | 'cr' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="DR" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dr">DR (Receivable)</SelectItem>
+                      <SelectItem value="cr">CR (Payable)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">

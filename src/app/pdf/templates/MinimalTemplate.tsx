@@ -44,15 +44,10 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
           <Label>Details</Label>
           <div style={{ marginTop: 8 }}>
             {!!doc.dueDate && <KeyValue label="Due" value={doc.dueDate} />}
-            {!!doc.placeOfSupply && <KeyValue label="Supply" value={doc.placeOfSupply} />}
             {isOrder && !!doc.referenceDocumentNumber && (
               <KeyValue label="Ref Quote" value={doc.referenceDocumentNumber} />
             )}
             {isQuoteLike && !!doc.orderNumber && <KeyValue label="Order" value={doc.orderNumber} />}
-            {isQuoteLike && !!doc.revisionNumber && <KeyValue label="Revision" value={doc.revisionNumber} />}
-            {isQuoteLike && !!doc.referenceNo && <KeyValue label="Ref" value={doc.referenceNo} />}
-            {isQuoteLike && !!doc.purchaseOrderNo && <KeyValue label="PO No" value={doc.purchaseOrderNo} />}
-            {isQuoteLike && !!doc.poDate && <KeyValue label="PO Date" value={doc.poDate} />}
             {!!doc.paymentStatus && <KeyValue label="Status" value={doc.paymentStatus} />}
           </div>
         </div>

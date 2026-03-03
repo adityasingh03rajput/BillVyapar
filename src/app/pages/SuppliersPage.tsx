@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Plus, Search, Building2, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +27,8 @@ interface Supplier {
   accountNumber?: string;
   ifscCode?: string;
   upiId?: string;
+  openingBalance?: number;
+  openingBalanceType?: 'dr' | 'cr';
 }
 
 export function SuppliersPage() {
@@ -224,6 +227,32 @@ export function SuppliersPage() {
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       placeholder="supplier@email.com"
                     />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Opening Balance</Label>
+                    <Input
+                      value={String(formData.openingBalance ?? '')}
+                      onChange={(e) => setFormData({ ...formData, openingBalance: Number(e.target.value || 0) })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <Label>Opening Type</Label>
+                    <Select
+                      value={String(formData.openingBalanceType || 'cr')}
+                      onValueChange={(value) => setFormData({ ...formData, openingBalanceType: value as 'dr' | 'cr' })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="CR" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cr">CR (Payable)</SelectItem>
+                        <SelectItem value="dr">DR (Receivable)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
@@ -431,6 +460,32 @@ export function SuppliersPage() {
                     onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
                     placeholder="supplier@email.com"
                   />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Opening Balance</Label>
+                  <Input
+                    value={String(editFormData.openingBalance ?? '')}
+                    onChange={(e) => setEditFormData({ ...editFormData, openingBalance: Number(e.target.value || 0) })}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <Label>Opening Type</Label>
+                  <Select
+                    value={String(editFormData.openingBalanceType || 'cr')}
+                    onValueChange={(value) => setEditFormData({ ...editFormData, openingBalanceType: value as 'dr' | 'cr' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="CR" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cr">CR (Payable)</SelectItem>
+                      <SelectItem value="dr">DR (Receivable)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">

@@ -5,6 +5,7 @@ import { requireActiveSubscription } from '../middleware/subscription.js';
 import { requireProfile } from '../middleware/profile.js';
 import { Payment } from '../models/Payment.js';
 import { Document } from '../models/Document.js';
+import { createLedgerForPayment } from '../lib/ledger.js';
 
 export const paymentsRouter = Router();
 
@@ -54,12 +55,16 @@ paymentsRouter.post('/', async (req, res, next) => {
 
     const documentId = body.documentId ? String(body.documentId) : null;
     const customerId = body.customerId ? String(body.customerId) : null;
+    const supplierId = body.supplierId ? String(body.supplierId) : null;
 
     if (documentId && !mongoose.Types.ObjectId.isValid(documentId)) {
       return res.status(400).json({ error: 'Invalid documentId' });
     }
     if (customerId && !mongoose.Types.ObjectId.isValid(customerId)) {
       return res.status(400).json({ error: 'Invalid customerId' });
+    }
+    if (supplierId && !mongoose.Types.ObjectId.isValid(supplierId)) {
+      return res.status(400).json({ error: 'Invalid supplierId' });
     }
 
     // Validate document belongs to current user/profile when provided
@@ -75,6 +80,7 @@ paymentsRouter.post('/', async (req, res, next) => {
       profileId: req.profileId,
       documentId,
       customerId,
+      supplierId,
       amount,
       currency: body.currency || 'INR',
       date,
@@ -82,6 +88,8 @@ paymentsRouter.post('/', async (req, res, next) => {
       reference: body.reference || null,
       notes: body.notes || null,
     });
+
+    await createLedgerForPayment({ userId: req.userId, profileId: req.profileId, payment });
 
     let docUpdate = null;
     if (documentId) {

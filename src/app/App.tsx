@@ -14,6 +14,7 @@ import { ItemsPageWrapper } from './pages/ItemsPageWrapper';
 import { AnalyticsPageWrapper } from './pages/AnalyticsPageWrapper';
 import { SubscriptionPageWrapper } from './pages/SubscriptionPageWrapper';
 import { GstReportsPage } from './pages/GstReportsPage';
+import { PartyLedgerPageWrapper } from './pages/PartyLedgerPageWrapper';
 
 const router = createBrowserRouter([
   {
@@ -63,6 +64,10 @@ const router = createBrowserRouter([
   {
     path: "/reports/gst",
     Component: GstReportsPage,
+  },
+  {
+    path: "/ledger",
+    Component: PartyLedgerPageWrapper,
   },
   {
     path: "/subscription",

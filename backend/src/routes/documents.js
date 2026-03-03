@@ -6,6 +6,7 @@ import { Counter } from '../models/Counter.js';
 import { Document } from '../models/Document.js';
 import { BusinessProfile } from '../models/BusinessProfile.js';
 import twilio from 'twilio';
+import { upsertLedgerForDocument } from '../lib/ledger.js';
 
 export const documentsRouter = Router();
 
@@ -165,14 +166,35 @@ documentsRouter.post('/:id/remind', async (req, res, next) => {
 });
 
 async function nextDocumentNumber(userId, profileId, type) {
-  const counter = await Counter.findOneAndUpdate(
-    { userId, profileId, docType: type },
-    { $inc: { value: 1 } },
-    { upsert: true, new: true }
-  );
+  const docType = String(type || '').trim() || 'invoice';
 
-  const num = String(counter.value).padStart(5, '0');
-  return `${String(type).toUpperCase()}-${num}`;
+  const run = async () => {
+    const counter = await Counter.findOneAndUpdate(
+      { userId, docType },
+      { $inc: { value: 1 }, $setOnInsert: { profileId: profileId || null } },
+      { upsert: true, new: true }
+    );
+
+    const num = String(counter.value).padStart(5, '0');
+    return `${String(docType).toUpperCase()}-${num}`;
+  };
+
+  try {
+    return await run();
+  } catch (err) {
+    const code = err?.code;
+    if (code !== 11000) throw err;
+
+    // Auto-heal duplicates for (userId, docType) then retry.
+    const duplicates = await Counter.find({ userId, docType }).sort({ value: -1, updatedAt: -1, createdAt: -1 });
+    if (duplicates.length > 1) {
+      const keep = duplicates[0];
+      const keepId = keep?._id;
+      await Counter.deleteMany({ userId, docType, _id: { $ne: keepId } });
+    }
+
+    return await run();
+  }
 }
 
 documentsRouter.post('/', async (req, res, next) => {
@@ -190,6 +212,8 @@ documentsRouter.post('/', async (req, res, next) => {
       ...docData,
       version: 1,
     });
+
+    await upsertLedgerForDocument({ userId: req.userId, profileId: req.profileId, documentId: doc._id });
 
     res.json({
       id: String(doc._id),

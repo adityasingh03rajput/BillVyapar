@@ -40,6 +40,12 @@ export type DocumentDto = {
   invoiceNo?: string | null;
   challanNo?: string | null;
   ewayBillNo?: string | null;
+  ewayBillDate?: string | null;
+  ewayBillValidUpto?: string | null;
+  ewayBillVehicleNo?: string | null;
+  ewayBillTransporterName?: string | null;
+  ewayBillTransporterDocNo?: string | null;
+  ewayBillDistanceKm?: number | null;
   transport?: string | null;
   transportId?: string | null;
   placeOfSupply?: string | null;

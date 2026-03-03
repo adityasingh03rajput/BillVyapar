@@ -21,6 +21,9 @@ const customerSchema = new mongoose.Schema(
     shippingPostalCode: { type: String, default: null },
     gstin: { type: String, default: null },
     pan: { type: String, default: null },
+
+    openingBalance: { type: Number, default: 0 },
+    openingBalanceType: { type: String, enum: ['dr', 'cr'], default: 'dr' },
   },
   { timestamps: true }
 );
