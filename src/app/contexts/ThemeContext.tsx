@@ -30,10 +30,10 @@ type LegacyMediaQueryList = MediaQueryList & {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'system';
+    if (typeof window === 'undefined') return 'light';
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw === 'light' || raw === 'dark' || raw === 'system') return raw;
-    return 'system';
+    return 'light';
   });
 
   const resolvedTheme = useMemo(() => {
