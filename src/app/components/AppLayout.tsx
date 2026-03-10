@@ -670,7 +670,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
           {!profileGateChecked ? (
             <div className="flex items-center justify-center h-full">
               <TraceLoader label="Loading..." />
@@ -717,7 +717,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                   </div>
                 </div>
               )}
-              {children}
+              <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 max-w-screen-2xl">
+                {children}
+              </div>
             </>
           )}
         </main>

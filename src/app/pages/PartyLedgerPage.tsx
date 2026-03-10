@@ -338,7 +338,7 @@ export function PartyLedgerPage() {
                 }}
                 disabled={loadingRanges || !partyId || quickRanges.length === 0}
               >
-                <SelectTrigger className="w-[280px]">
+                <SelectTrigger className="w-full sm:w-[280px]">
                   <SelectValue
                     placeholder={
                       loadingRanges

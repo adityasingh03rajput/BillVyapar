@@ -1,17 +1,17 @@
 import axios from 'axios';
 
-const GSTIN_API_KEY = process.env.GSTIN_API_KEY;
 const GSTIN_BASE_URL = 'https://sheet.gstincheck.co.in/check';
 
 export function canCheckGstin() {
-  return Boolean(GSTIN_API_KEY);
+  return Boolean(process.env.GSTIN_API_KEY);
 }
 
 export async function fetchGstinDetails(gstin) {
-  if (!GSTIN_API_KEY) throw new Error('GSTIN_API_KEY not configured');
+  const apiKey = process.env.GSTIN_API_KEY;
+  if (!apiKey) throw new Error('GSTIN_API_KEY not configured');
   const cleaned = String(gstin || '').trim().toUpperCase().replace(/\s+/g, '');
   if (!cleaned) throw new Error('GSTIN is required');
-  const url = `${GSTIN_BASE_URL}/${GSTIN_API_KEY}/${cleaned}`;
+  const url = `${GSTIN_BASE_URL}/${apiKey}/${cleaned}`;
   const res = await axios.get(url, { timeout: 10000 });
   if (!res.data?.flag) {
     throw new Error(res.data?.message || 'GSTIN not found');

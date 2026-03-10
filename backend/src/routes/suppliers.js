@@ -129,7 +129,13 @@ suppliersRouter.post('/gstin', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid GSTIN format' });
     }
 
-    const gstData = await fetchGstinDetails(cleaned);
+    let gstData;
+    try {
+      gstData = await fetchGstinDetails(cleaned);
+    } catch (e) {
+      const message = e?.message ? String(e.message) : 'GSTIN lookup failed';
+      return res.status(400).json({ error: message });
+    }
 
     const existing = await Supplier.findOne({ userId: req.userId, profileId: req.profileId, gstin: gstData.gstin });
     if (existing) {

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PdfTemplateProps } from '../types';
-import { Hr, KeyValue, KeyValueOptional, Label, Money, Muted, safeText, SmallText, TemplateFrame, docTitleFromType } from './TemplateFrame';
+import { Hr, KeyValue, KeyValueOptional, Label, Money, Muted, safeText, SmallText, TemplateFrame, docTitleFromType, amountInWordsINR } from './TemplateFrame';
 
 export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
   const taxes = Number(doc.totalCgst || 0) + Number(doc.totalSgst || 0) + Number(doc.totalIgst || 0);
@@ -8,6 +8,7 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
   const isQuotation = typeLower === 'quotation';
   const isOrder = typeLower === 'order';
   const isQuoteLike = isQuotation || isOrder;
+  const businessStateCode = String(profile.gstin || '').trim().slice(0, 2);
   const customFields = Array.isArray(doc.customFields)
     ? doc.customFields
         .map((x) => ({ label: String(x?.label || '').trim(), value: String(x?.value || '').trim() }))
@@ -19,11 +20,11 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>{profile.businessName}</div>
-          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{profile.ownerName}</div>
           {!!profile.billingAddress && (
             <div style={{ fontSize: 11, color: '#6B7280', marginTop: 8, whiteSpace: 'pre-line' }}>{profile.billingAddress}</div>
           )}
           {!!profile.gstin && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>GSTIN: {profile.gstin}</div>}
+          {!!profile.gstin && businessStateCode && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>State Code: {businessStateCode}</div>}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, color: '#111827' }}>{docTitleFromType(doc.type)}</div>
@@ -44,11 +45,20 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
             <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280', whiteSpace: 'pre-line' }}>{doc.customerAddress}</div>
           )}
           {!!doc.customerGstin && <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>GSTIN: {doc.customerGstin}</div>}
+          {!!doc.customerStateCode && <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>State Code: {doc.customerStateCode}</div>}
+
+          {!!doc.deliveryAddress && (
+            <div style={{ marginTop: 10 }}>
+              <Label>Ship To</Label>
+              <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280', whiteSpace: 'pre-line' }}>{doc.deliveryAddress}</div>
+            </div>
+          )}
         </div>
         <div style={{ width: 280, minWidth: 280 }}>
           <Label>Details</Label>
           <div style={{ marginTop: 8 }}>
             <KeyValueOptional label="Due" value={doc.dueDate} />
+            <KeyValueOptional label="Place of Supply" value={doc.placeOfSupply} />
             {isOrder && !!doc.referenceDocumentNumber && (
               <KeyValue label="Ref Quote" value={doc.referenceDocumentNumber} />
             )}
@@ -68,14 +78,16 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
 
       <div style={{ marginTop: 10 }}>
         <div style={{ display: 'flex', fontSize: 12, fontWeight: 900, color: '#111827', padding: '8px 0' }}>
+          <div style={{ width: 34, textAlign: 'center' }}>S.N.</div>
           <div style={{ flex: 1 }}>Item</div>
-          <div style={{ width: 70, textAlign: 'right' }}>Qty</div>
-          <div style={{ width: 90, textAlign: 'right' }}>Rate</div>
-          <div style={{ width: 100, textAlign: 'right' }}>Total</div>
+          <div style={{ width: 70, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Qty</div>
+          <div style={{ width: 90, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Rate</div>
+          <div style={{ width: 100, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Total</div>
         </div>
 
         {doc.items?.map((it, idx) => (
-          <div key={idx} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid #F3F4F6' }}>
+          <div key={idx} style={{ display: 'flex', gap: 0, alignItems: 'center', padding: '10px 0', borderTop: '1px solid #F3F4F6' }}>
+            <div style={{ width: 34, textAlign: 'center', fontSize: 11, color: '#111827', fontWeight: 800 }}>{idx + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>{it.name}</div>
               {!!it.hsnSac && <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>HSN/SAC: {it.hsnSac}</div>}
@@ -85,11 +97,11 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
                 <div style={{ fontSize: 10, color: '#374151', marginTop: 4, whiteSpace: 'pre-line' }}>{it.description}</div>
               )}
             </div>
-            <div style={{ width: 70, textAlign: 'right', fontSize: 12, color: '#111827' }}>{Number(it.quantity || 0)}</div>
-            <div style={{ width: 90, textAlign: 'right', fontSize: 12, color: '#111827' }}>
+            <div style={{ width: 70, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>{Number(it.quantity || 0)}</div>
+            <div style={{ width: 90, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>
               <Money value={Number(it.rate || 0)} />
             </div>
-            <div style={{ width: 100, textAlign: 'right', fontSize: 12, fontWeight: 900, color: '#111827' }}>
+            <div style={{ width: 100, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, fontWeight: 900, color: '#111827' }}>
               <Money value={Number(it.total || 0)} />
             </div>
           </div>
@@ -116,6 +128,16 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
         </div>
       </div>
 
+      <div style={{ marginTop: 16 }}>
+        <Hr />
+        <div style={{ marginTop: 12 }}>
+          <Label>Invoice Amount In Words</Label>
+          <div style={{ marginTop: 8 }}>
+            <SmallText style={{ fontWeight: 900 } as any}>{amountInWordsINR(Number(doc.grandTotal || 0))}</SmallText>
+          </div>
+        </div>
+      </div>
+
       {!!doc.termsConditions && (
         <div style={{ marginTop: 16 }}>
           <Hr />
@@ -125,6 +147,29 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
               <SmallText>
                 <div style={{ whiteSpace: 'pre-line' }}>{doc.termsConditions}</div>
               </SmallText>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(profile.bankName || (profile as any).accountNumber || (profile as any).ifscCode || doc.bankName || doc.bankAccountNumber || doc.bankIfsc) && (
+        <div style={{ marginTop: 16 }}>
+          <Hr />
+          <div style={{ marginTop: 12 }}>
+            <Label>Bank Details</Label>
+            <div style={{ marginTop: 8 }}>
+              <KeyValueOptional label="Name" value={doc.bankName || profile.bankName} />
+              <KeyValueOptional
+                label="Account Holder"
+                value={
+                  (doc as any).bankAccountHolderName ||
+                  (doc as any).bankHolderName ||
+                  (profile as any).accountHolderName ||
+                  profile.businessName
+                }
+              />
+              <KeyValueOptional label="Account No" value={doc.bankAccountNumber || (profile as any).accountNumber} />
+              <KeyValueOptional label="IFSC" value={doc.bankIfsc || (profile as any).ifscCode} />
             </div>
           </div>
         </div>

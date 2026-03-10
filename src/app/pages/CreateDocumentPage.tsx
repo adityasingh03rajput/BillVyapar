@@ -1107,25 +1107,46 @@ export function CreateDocumentPage() {
     setItems(newItems);
   };
 
-  const addItem = () => {
-    setItems([...items, {
-      name: '',
-      hsnSac: '',
-      description: '',
-      sku: '',
-      servicePeriod: '',
-      quantity: 1,
-      unit: 'NONE',
-      rate: 0,
-      sellingPrice: 0,
-      purchaseCost: 0,
-      currency: 'INR',
-      discount: 0,
-      cgst: 9,
-      sgst: 9,
-      igst: 0,
-      total: 0
-    }]);
+  const handleAddRow = () => {
+    setItems((prev) => {
+      const safePrev = Array.isArray(prev) ? prev : [];
+      const nextIndex = safePrev.length;
+      const first = nextIndex > 0 ? safePrev[0] : null;
+
+      const nextCurrency: CurrencyCode = (first?.currency as CurrencyCode) || 'INR';
+      const nextUnit = type === 'proforma' ? 'NONE' : String(first?.unit || 'pcs');
+      const nextTax = (() => {
+        // Keep existing default behavior: 18% split into 9/9 by default.
+        // (IGST can be adjusted by user via Tax select.)
+        return { cgst: 9, sgst: 9, igst: 0 };
+      })();
+
+      const newRow: DocumentItem = {
+        name: '',
+        hsnSac: '',
+        description: '',
+        sku: '',
+        servicePeriod: '',
+        quantity: 1,
+        unit: nextUnit,
+        rate: 0,
+        sellingPrice: 0,
+        purchaseCost: 0,
+        currency: nextCurrency,
+        discount: 0,
+        cgst: nextTax.cgst,
+        sgst: nextTax.sgst,
+        igst: nextTax.igst,
+        total: 0,
+      };
+      newRow.total = calculateItemTotal(newRow);
+
+      // Ensure per-row UI state doesn't leak into the new row.
+      setProformaItemPopoverOpen((m) => ({ ...(m || {}), [nextIndex]: false }));
+      setExpandedItemRows((m) => ({ ...(m || {}), [nextIndex]: false }));
+
+      return [...safePrev, newRow];
+    });
   };
 
   const removeItem = (index: number) => {
@@ -1511,6 +1532,12 @@ export function CreateDocumentPage() {
                                   setCustomerName(String(c.name || ''));
                                   setCustomerAddress(String(c.address || c.billingAddress || '').trim());
                                   setCustomerGstin(String(c.gstin || '').trim());
+                                  if (!deliveryAddress.trim()) {
+                                    const nextShip = String((c as any)?.shippingAddress || (c as any)?.shipping_address || '').trim();
+                                    const fallback = String((c as any)?.billingAddress || (c as any)?.address || '').trim();
+                                    const resolved = nextShip || fallback;
+                                    if (resolved) setDeliveryAddress(resolved);
+                                  }
                                   if (!String(placeOfSupply || '').trim()) {
                                     const pos = String((c as any)?.billingState || (c as any)?.state || '').trim();
                                     if (pos) setPlaceOfSupply(pos);
@@ -1527,6 +1554,20 @@ export function CreateDocumentPage() {
                       </Command>
                     </PopoverContent>
                   </Popover>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardContent className="p-4">
+                <div className="max-w-[520px]">
+                  <Label>Ship To</Label>
+                  <Textarea
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    rows={3}
+                    placeholder="Enter shipping address"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -1720,12 +1761,11 @@ export function CreateDocumentPage() {
                     })}
 
                     <div className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] bg-background">
-                      <div className="px-2 py-2">
-                        <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                      <div className="px-2 py-2 col-span-2">
+                        <Button type="button" variant="outline" size="sm" onClick={handleAddRow}>
                           Add Row
                         </Button>
                       </div>
-                      <div className="px-2 py-2" />
                       <div className="px-2 py-2 text-xs text-muted-foreground">TOTAL</div>
                       <div className="px-2 py-2 text-xs text-muted-foreground text-right">
                         {items.reduce((s, x) => s + Number(x.quantity || 0), 0)}
@@ -1813,6 +1853,30 @@ export function CreateDocumentPage() {
                     />
                   </div>
                 )}
+
+                <Card className="shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="mt-2 max-w-[520px]">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        rows={3}
+                        placeholder="Enter description"
+                      />
+                    </div>
+
+                    <div className="mt-4 max-w-[520px]">
+                      <Label>Terms & Conditions</Label>
+                      <Textarea
+                        value={termsConditions}
+                        onChange={(e) => setTermsConditions(e.target.value)}
+                        rows={4}
+                        placeholder="Enter terms and conditions"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {proformaAttachment && (
                   <div className="text-xs text-muted-foreground">Attachment: {proformaAttachment.name}</div>

@@ -220,7 +220,6 @@ export function TemplateCommonHeader({ doc, profile }: PdfTemplateProps) {
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.15 }}>{profile.businessName}</div>
-        <div style={{ fontSize: 13, color: '#374151', marginTop: 4 }}>{profile.ownerName}</div>
         {!!profile.billingAddress && (
           <div style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'pre-line', marginTop: 10 }}>
             {profile.billingAddress}

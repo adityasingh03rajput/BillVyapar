@@ -22,6 +22,7 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
   const isQuotation = typeLower === 'quotation';
   const isOrder = typeLower === 'order';
   const isQuoteLike = isQuotation || isOrder;
+  const businessStateCode = String(profile.gstin || '').trim().slice(0, 2);
   const lineComputed = (it: any) => {
     const qty = Number(it?.quantity || 0);
     const rate = Number(it?.rate || 0);
@@ -85,14 +86,15 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
                   />
                 </div>
               )}
-              <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: 1.2, lineHeight: 1 }}>INVOICE</div>
+              <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: 1.2, lineHeight: 1 }}>
+                {String(docTitleFromType(doc.type) || 'DOCUMENT').toUpperCase()}
+              </div>
               <div style={{ fontSize: 12, opacity: 0.95, marginTop: 8, fontWeight: 600 }}>
-                {docTitleFromType(doc.type)}
+                {safeText(doc.invoiceNo) || safeText(doc.documentNumber)}
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 14, fontWeight: 800 }}>{profile.businessName}</div>
-              <div style={{ fontSize: 12, opacity: 0.95, marginTop: 4 }}>{profile.ownerName}</div>
               {!!profile.billingAddress && (
                 <div style={{ fontSize: 11, opacity: 0.9, marginTop: 8, whiteSpace: 'pre-line' }}>
                   {profile.billingAddress}
@@ -100,6 +102,8 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
               )}
               {!!profile.phone && <div style={{ fontSize: 11, opacity: 0.9, marginTop: 8 }}>{profile.phone}</div>}
               {!!profile.email && <div style={{ fontSize: 11, opacity: 0.9 }}>{profile.email}</div>}
+              {!!profile.gstin && <div style={{ fontSize: 11, opacity: 0.9 }}>GSTIN: {profile.gstin}</div>}
+              {!!profile.gstin && businessStateCode && <div style={{ fontSize: 11, opacity: 0.9 }}>State Code: {businessStateCode}</div>}
             </div>
           </div>
         </div>
@@ -118,7 +122,17 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
                   </div>
                 )}
                 {!!doc.customerGstin && <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>GSTIN: {doc.customerGstin}</div>}
+                {!!doc.customerStateCode && <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>State Code: {doc.customerStateCode}</div>}
               </Box>
+
+              {!!doc.deliveryAddress && (
+                <div style={{ marginTop: 12 }}>
+                  <Box>
+                    <Label>Ship To</Label>
+                    <div style={{ marginTop: 8, fontSize: 11, color: '#6B7280', whiteSpace: 'pre-line' }}>{doc.deliveryAddress}</div>
+                  </Box>
+                </div>
+              )}
             </div>
 
             <div style={{ width: 280, minWidth: 280 }}>
@@ -178,14 +192,15 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
             <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ background: '#F3F4F6', padding: '10px 12px' }}>
                 <div style={{ display: 'flex', fontSize: 12, fontWeight: 800, color: '#111827' }}>
+                  <div style={{ width: 34, textAlign: 'center' }}>S.N.</div>
                   <div style={{ flex: 1 }}>Item</div>
-                  <div style={{ width: 72 }}>HSN/SAC</div>
-                  <div style={{ width: 52, textAlign: 'right' }}>Qty</div>
-                  <div style={{ width: 80, textAlign: 'right' }}>Price/Unit</div>
-                  <div style={{ width: 86, textAlign: 'right' }}>Taxable</div>
-                  <div style={{ width: 56, textAlign: 'right' }}>GST%</div>
-                  <div style={{ width: 76, textAlign: 'right' }}>Tax</div>
-                  <div style={{ width: 92, textAlign: 'right' }}>Amount</div>
+                  <div style={{ width: 72, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>HSN/SAC</div>
+                  <div style={{ width: 52, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Qty</div>
+                  <div style={{ width: 80, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Price/Unit</div>
+                  <div style={{ width: 86, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Taxable</div>
+                  <div style={{ width: 56, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>GST%</div>
+                  <div style={{ width: 76, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Tax</div>
+                  <div style={{ width: 92, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Amount</div>
                 </div>
               </div>
 
@@ -194,7 +209,8 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
                 const c = lineComputed(it);
                 return (
                   <div key={idx} style={{ padding: '10px 12px', background: rowBg, borderTop: '1px solid #E5E7EB' }}>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
+                      <div style={{ width: 34, textAlign: 'center', fontSize: 11, color: '#111827', fontWeight: 800 }}>{idx + 1}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{it.name}</div>
                         {!!it.sku && <div style={{ marginTop: 2, fontSize: 10, color: '#6B7280' }}>SKU: {it.sku}</div>}
@@ -205,19 +221,21 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
                           <div style={{ marginTop: 4, fontSize: 10, color: '#374151', whiteSpace: 'pre-line' }}>{it.description}</div>
                         )}
                       </div>
-                      <div style={{ width: 72, fontSize: 11, color: '#111827' }}>{safeText(it.hsnSac) || '—'}</div>
-                      <div style={{ width: 52, textAlign: 'right', fontSize: 12, color: '#111827' }}>{c.qty}</div>
-                      <div style={{ width: 80, textAlign: 'right', fontSize: 12, color: '#111827' }}>
+                      <div style={{ width: 72, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 11, color: '#111827' }}>
+                        {safeText(it.hsnSac) || '—'}
+                      </div>
+                      <div style={{ width: 52, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>{c.qty}</div>
+                      <div style={{ width: 80, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>
                         <Money value={c.rate} />
                       </div>
-                      <div style={{ width: 86, textAlign: 'right', fontSize: 12, color: '#111827' }}>
+                      <div style={{ width: 86, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>
                         <Money value={c.taxable} />
                       </div>
-                      <div style={{ width: 56, textAlign: 'right', fontSize: 12, color: '#111827' }}>{c.taxPct.toFixed(2)}</div>
-                      <div style={{ width: 76, textAlign: 'right', fontSize: 12, color: '#111827' }}>
+                      <div style={{ width: 56, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>{c.taxPct.toFixed(2)}</div>
+                      <div style={{ width: 76, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>
                         <Money value={c.taxAmount} />
                       </div>
-                      <div style={{ width: 92, textAlign: 'right', fontSize: 12, fontWeight: 800, color: '#111827' }}>
+                      <div style={{ width: 92, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, fontWeight: 800, color: '#111827' }}>
                         <Money value={c.total} />
                       </div>
                     </div>
@@ -325,6 +343,15 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
                     <Label>Bank Details</Label>
                     <div style={{ marginTop: 10 }}>
                       <KeyValueOptional label="Bank" value={doc.bankName || profile.bankName} />
+                      <KeyValueOptional
+                        label="Account Holder"
+                        value={
+                          (doc as any).bankAccountHolderName ||
+                          (doc as any).bankHolderName ||
+                          (profile as any).accountHolderName ||
+                          profile.businessName
+                        }
+                      />
                       <KeyValueOptional label="A/C No" value={doc.bankAccountNumber || (profile as any).accountNumber} />
                       <KeyValueOptional label="IFSC" value={doc.bankIfsc || (profile as any).ifscCode} />
                     </div>
