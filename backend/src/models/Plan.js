@@ -15,6 +15,7 @@ const planSchema = new mongoose.Schema(
     seatPrice: { type: Number, default: 0 },
     limits: {
       maxSeats: { type: Number, default: 5 },
+      maxSessions: { type: Number, default: 1 }, // max concurrent device logins
       maxDocumentsPerMonth: { type: Number, default: -1 },
       maxCustomers: { type: Number, default: -1 },
       maxSuppliers: { type: Number, default: -1 },

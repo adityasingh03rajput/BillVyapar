@@ -30,14 +30,9 @@ export async function requireValidDeviceSession(req, res, next) {
   try {
     const deviceId = req.header('X-Device-ID') || `web-${Date.now()}`;
 
-    const session = await Session.findOne({ userId: req.userId });
-    if (session && session.deviceId !== deviceId) {
-      return res.status(403).json({ error: 'Session expired. Login detected from another device.' });
-    }
-
     await Session.findOneAndUpdate(
-      { userId: req.userId },
-      { $set: { deviceId, lastActive: new Date() } },
+      { userId: req.userId, deviceId },
+      { $set: { lastActive: new Date() } },
       { upsert: true, new: true }
     );
 

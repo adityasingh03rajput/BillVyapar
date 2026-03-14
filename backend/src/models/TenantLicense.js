@@ -9,6 +9,7 @@ const tenantLicenseSchema = new mongoose.Schema(
     graceEndAt: { type: Date, default: null },
     paymentState: { type: String, enum: ['paid', 'unpaid', 'grace'], default: 'paid' },
     maxSeats: { type: Number, default: 5 },
+    maxSessions: { type: Number, default: 1 }, // override plan's maxSessions per license
     customEntitlements: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }

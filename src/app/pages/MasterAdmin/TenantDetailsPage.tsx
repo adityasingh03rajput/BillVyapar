@@ -24,7 +24,7 @@ export function MasterAdminTenantDetailsPage() {
       const data = await response.json();
       if (data.error) {
         toast.error(data.error);
-        navigate('/master-admin/tenants');
+        navigate('/tenants');
       } else {
         // Flatten the response structure
         setTenant({
@@ -36,7 +36,7 @@ export function MasterAdminTenantDetailsPage() {
       }
     } catch (error) {
       toast.error('Failed to load tenant details');
-      navigate('/master-admin/tenants');
+      navigate('/tenants');
     } finally {
       setLoading(false);
     }
@@ -126,7 +126,7 @@ export function MasterAdminTenantDetailsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-16 gap-4">
             <button
-              onClick={() => navigate('/master-admin/tenants')}
+              onClick={() => navigate('/tenants')}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <ArrowLeft className="h-5 w-5 text-gray-600" />

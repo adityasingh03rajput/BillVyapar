@@ -45,7 +45,7 @@ export function MasterAdminDashboardPage() {
   const handleLogout = () => {
     localStorage.removeItem('masterAdminToken');
     localStorage.removeItem('masterAdmin');
-    navigate('/master-admin/login');
+    navigate('/login');
   };
 
   if (loading) {
@@ -199,7 +199,7 @@ export function MasterAdminDashboardPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <button
-              onClick={() => navigate('/master-admin/tenants')}
+              onClick={() => navigate('/tenants')}
               className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-6 text-left transition-colors"
             >
               <Users className="h-8 w-8 mb-3" />
@@ -208,7 +208,7 @@ export function MasterAdminDashboardPage() {
             </button>
 
             <button
-              onClick={() => navigate('/master-admin/users')}
+              onClick={() => navigate('/users')}
               className="bg-white hover:bg-gray-50 border-2 border-gray-200 rounded-xl p-6 text-left transition-colors"
             >
               <Building2 className="h-8 w-8 mb-3 text-gray-700" />
@@ -217,7 +217,7 @@ export function MasterAdminDashboardPage() {
             </button>
 
             <button
-              onClick={() => navigate('/master-admin/plans')}
+              onClick={() => navigate('/plans')}
               className="bg-white hover:bg-gray-50 border-2 border-gray-200 rounded-xl p-6 text-left transition-colors"
             >
               <Package className="h-8 w-8 mb-3 text-gray-700" />
@@ -226,7 +226,7 @@ export function MasterAdminDashboardPage() {
             </button>
 
             <button
-              onClick={() => navigate('/master-admin/data')}
+              onClick={() => navigate('/data')}
               className="bg-white hover:bg-gray-50 border-2 border-gray-200 rounded-xl p-6 text-left transition-colors"
             >
               <FileText className="h-8 w-8 mb-3 text-gray-700" />
@@ -235,7 +235,7 @@ export function MasterAdminDashboardPage() {
             </button>
 
             <button
-              onClick={() => navigate('/master-admin/audit')}
+              onClick={() => navigate('/audit')}
               className="bg-white hover:bg-gray-50 border-2 border-gray-200 rounded-xl p-6 text-left transition-colors"
             >
               <TrendingUp className="h-8 w-8 mb-3 text-gray-700" />

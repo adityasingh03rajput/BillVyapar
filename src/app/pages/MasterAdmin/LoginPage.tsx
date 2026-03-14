@@ -29,7 +29,7 @@ export function MasterAdminLoginPage() {
         localStorage.setItem('masterAdminToken', data.accessToken);
         localStorage.setItem('masterAdmin', JSON.stringify(data.admin));
         toast.success('Welcome back!');
-        navigate('/master-admin/dashboard');
+        navigate('/dashboard');
       }
     } catch (error) {
       toast.error('Failed to sign in');

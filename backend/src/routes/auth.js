@@ -5,6 +5,9 @@ import { User } from '../models/User.js';
 import { Subscription } from '../models/Subscription.js';
 import { Session } from '../models/Session.js';
 import { PasswordResetOtp } from '../models/PasswordResetOtp.js';
+import { Tenant } from '../models/Tenant.js';
+import { TenantLicense } from '../models/TenantLicense.js';
+import { Plan } from '../models/Plan.js';
 import { signAccessToken, decodeAccessToken } from '../lib/jwt.js';
 import { requireAuth, requireValidDeviceSession } from '../middleware/auth.js';
 import { canSendSms, sendSms } from '../lib/twilio.js';
@@ -121,23 +124,30 @@ authRouter.post('/signin', async (req, res, next) => {
 
     const deviceId = req.header('X-Device-ID') || `web-${Date.now()}`;
 
-    const existingSession = await Session.findOne({ userId: user._id });
-    if (existingSession && existingSession.deviceId && existingSession.deviceId !== deviceId) {
-      const lockMinutes = Number(process.env.SESSION_LOCK_MINUTES || 60 * 24);
-      const maxAgeMs = Math.max(1, lockMinutes) * 60 * 1000;
-      const lastActiveMs = existingSession.lastActive ? new Date(existingSession.lastActive).getTime() : 0;
-      const isActive = Date.now() - lastActiveMs < maxAgeMs;
-      if (isActive) {
-        return res.status(409).json({
-          error: 'Account already opened on another device. Use Forgot Password to continue.',
-          code: 'ALREADY_LOGGED_IN_ANOTHER_DEVICE',
-        });
+    // Enforce maxSessions from plan/license
+    const tenant = await Tenant.findOne({ ownerUserId: user._id }).lean();
+    if (tenant) {
+      const license = await TenantLicense.findOne({ tenantId: tenant._id }).lean();
+      if (license) {
+        const plan = await Plan.findById(license.planId).lean();
+        const maxSessions = license.maxSessions ?? plan?.limits?.maxSessions ?? 1;
+        if (maxSessions > 0) {
+          const activeSessions = await Session.countDocuments({ userId: user._id });
+          // Check if this device already has a session (re-login on same device is fine)
+          const existingDeviceSession = await Session.findOne({ userId: user._id, deviceId }).lean();
+          if (!existingDeviceSession && activeSessions >= maxSessions) {
+            return res.status(409).json({
+              error: `Maximum ${maxSessions} device login(s) allowed on your plan. Please sign out from another device first.`,
+              code: 'MAX_SESSIONS_REACHED',
+            });
+          }
+        }
       }
     }
 
     await Session.findOneAndUpdate(
-      { userId: user._id },
-      { $set: { deviceId, lastActive: new Date() } },
+      { userId: user._id, deviceId },
+      { $set: { lastActive: new Date() } },
       { upsert: true, new: true }
     );
 
@@ -167,7 +177,12 @@ authRouter.post('/signout', async (req, res, next) => {
     if (token) {
       const payload = decodeAccessToken(token);
       if (payload?.sub) {
-        await Session.deleteOne({ userId: payload.sub });
+        const deviceId = req.header('X-Device-ID');
+        if (deviceId) {
+          await Session.deleteOne({ userId: payload.sub, deviceId });
+        } else {
+          await Session.deleteMany({ userId: payload.sub });
+        }
       }
     }
     res.json({ ok: true });
