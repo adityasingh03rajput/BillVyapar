@@ -71,3 +71,7 @@ export const resolveApiUrl = () => {
 };
 
 export const API_URL = resolveApiUrl();
+
+// For admin panel: always use the env-configured URL, never the localStorage override
+const metaRaw = (import.meta as any)?.env?.VITE_API_URL as string | undefined;
+export const ADMIN_API_URL = normalizeApiUrl(metaRaw);

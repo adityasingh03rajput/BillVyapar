@@ -1,71 +1,48 @@
-import { Tenant } from '../models/Tenant.js';
-import { TenantLicense } from '../models/TenantLicense.js';
+import { User } from '../models/User.js';
+import { LicenseKey } from '../models/LicenseKey.js';
+
+const TRIAL_DAYS = 7;
 
 export async function enforceTenantAccess(req, res, next) {
   try {
-    // Find tenant by user ID
-    const tenant = await Tenant.findOne({ ownerUserId: req.userId });
-    
-    if (!tenant) {
-      // User is not a tenant yet - allow access (backward compatibility)
+    const user = await User.findById(req.userId).lean();
+    if (!user) return res.status(401).json({ error: 'User not found' });
+
+    // Check if user has an active license key
+    const activeLicense = await LicenseKey.findOne({
+      activatedByUserId: req.userId,
+      status: 'active',
+      expiresAt: { $gt: new Date() },
+    }).lean();
+
+    if (activeLicense) {
+      req.licenseKey = activeLicense;
       return next();
     }
 
-    // Check if tenant is suspended
-    if (tenant.status === 'suspended') {
-      return res.status(403).json({
-        error: 'Account suspended',
-        message: 'Your account has been suspended. Please contact support.',
-        code: 'TENANT_SUSPENDED',
-      });
-    }
-
-    // Check license
-    const license = await TenantLicense.findOne({ tenantId: tenant._id });
-    
-    if (!license) {
-      // No license assigned yet - allow access (backward compatibility)
-      return next();
-    }
-
+    // Check trial period (7 days from account creation)
+    const trialEnd = new Date(user.createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
     const now = new Date();
-    const licenseEnd = new Date(license.licenseEndAt);
-    const graceEnd = license.graceEndAt ? new Date(license.graceEndAt) : null;
 
-    // Check if license is expired
-    if (now > licenseEnd) {
-      // Check grace period
-      if (graceEnd && now <= graceEnd) {
-        // In grace period - allow limited access
-        req.tenantInGrace = true;
-        return next();
-      }
-
-      // Expired and no grace
-      return res.status(402).json({
-        error: 'Subscription expired',
-        message: 'Your subscription has expired. Please renew to continue.',
-        code: 'LICENSE_EXPIRED',
-        licenseEndAt: license.licenseEndAt,
-      });
+    if (now <= trialEnd) {
+      req.trialActive = true;
+      req.trialEndsAt = trialEnd;
+      return next();
     }
 
-    // License is valid
-    req.tenant = tenant;
-    req.tenantLicense = license;
-    next();
+    // Trial expired, no active license
+    return res.status(402).json({
+      error: 'Trial expired',
+      message: 'Your 7-day free trial has ended. Please activate a license key to continue.',
+      code: 'TRIAL_EXPIRED',
+      trialEndedAt: trialEnd.toISOString(),
+    });
   } catch (err) {
     next(err);
   }
 }
 
+// Keep for backward compat — no-op now since we removed grace period
 export function blockCreateInGrace(req, res, next) {
-  if (req.tenantInGrace && ['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    return res.status(402).json({
-      error: 'Grace period - limited access',
-      message: 'Your subscription is in grace period. Renew to create or modify data.',
-      code: 'GRACE_PERIOD_LIMIT',
-    });
-  }
   next();
 }

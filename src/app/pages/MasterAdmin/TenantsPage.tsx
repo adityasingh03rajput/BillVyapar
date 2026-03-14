@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { API_URL } from '../../config/api';
+import { ADMIN_API_URL as API_URL } from '../../config/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Search, Users, CheckCircle, XCircle, Clock, Ban, RefreshCw } from 'lucide-react';
 
@@ -162,6 +162,12 @@ export function MasterAdminTenantsPage() {
                 </div>
 
                 <div className="flex gap-2 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => navigate(`/tenants/${tenant._id}`)}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    View Details
+                  </button>
                   {tenant.status === 'active' && (
                     <button
                       onClick={() => handleSuspend(tenant._id)}

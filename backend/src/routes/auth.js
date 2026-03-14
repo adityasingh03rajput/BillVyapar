@@ -5,9 +5,7 @@ import { User } from '../models/User.js';
 import { Subscription } from '../models/Subscription.js';
 import { Session } from '../models/Session.js';
 import { PasswordResetOtp } from '../models/PasswordResetOtp.js';
-import { Tenant } from '../models/Tenant.js';
-import { TenantLicense } from '../models/TenantLicense.js';
-import { Plan } from '../models/Plan.js';
+import { LicenseKey } from '../models/LicenseKey.js';
 import { signAccessToken, decodeAccessToken } from '../lib/jwt.js';
 import { requireAuth, requireValidDeviceSession } from '../middleware/auth.js';
 import { canSendSms, sendSms } from '../lib/twilio.js';
@@ -68,23 +66,7 @@ authRouter.post('/signup', async (req, res, next) => {
       referralCode,
     });
 
-    const startDate = new Date();
-    const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-    const subscription = await Subscription.findOneAndUpdate(
-      { userId: user._id },
-      {
-        $set: {
-          userId: user._id,
-          plan: 'trial',
-          startDate,
-          endDate,
-          active: true,
-          previousPlan: null,
-        },
-      },
-      { upsert: true, new: true }
-    );
+    const trialEndsAt = new Date(user.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     res.json({
       user: {
@@ -92,12 +74,10 @@ authRouter.post('/signup', async (req, res, next) => {
         email: user.email,
         user_metadata: { name: user.name },
       },
-      subscription: {
-        userId: String(subscription.userId),
-        plan: subscription.plan,
-        startDate: subscription.startDate.toISOString(),
-        endDate: subscription.endDate.toISOString(),
-        active: subscription.active,
+      trial: {
+        active: true,
+        trialEndsAt: trialEndsAt.toISOString(),
+        daysRemaining: 7,
       },
     });
   } catch (err) {
@@ -123,27 +103,6 @@ authRouter.post('/signin', async (req, res, next) => {
     }
 
     const deviceId = req.header('X-Device-ID') || `web-${Date.now()}`;
-
-    // Enforce maxSessions from plan/license
-    const tenant = await Tenant.findOne({ ownerUserId: user._id }).lean();
-    if (tenant) {
-      const license = await TenantLicense.findOne({ tenantId: tenant._id }).lean();
-      if (license) {
-        const plan = await Plan.findById(license.planId).lean();
-        const maxSessions = license.maxSessions ?? plan?.limits?.maxSessions ?? 1;
-        if (maxSessions > 0) {
-          const activeSessions = await Session.countDocuments({ userId: user._id });
-          // Check if this device already has a session (re-login on same device is fine)
-          const existingDeviceSession = await Session.findOne({ userId: user._id, deviceId }).lean();
-          if (!existingDeviceSession && activeSessions >= maxSessions) {
-            return res.status(409).json({
-              error: `Maximum ${maxSessions} device login(s) allowed on your plan. Please sign out from another device first.`,
-              code: 'MAX_SESSIONS_REACHED',
-            });
-          }
-        }
-      }
-    }
 
     await Session.findOneAndUpdate(
       { userId: user._id, deviceId },
@@ -335,6 +294,98 @@ authRouter.post('/reset-password', async (req, res, next) => {
     await Session.deleteOne({ userId: user._id });
 
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /auth/license-status — returns trial info or active license info
+authRouter.get('/license-status', requireAuth, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.userId).lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const TRIAL_DAYS = 7;
+    const trialEndsAt = new Date(user.createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const trialActive = now <= trialEndsAt;
+    const trialDaysRemaining = Math.max(0, Math.ceil((trialEndsAt - now) / (1000 * 60 * 60 * 24)));
+
+    const activeLicense = await LicenseKey.findOne({
+      activatedByUserId: req.userId,
+      status: 'active',
+      expiresAt: { $gt: now },
+    }).lean();
+
+    if (activeLicense) {
+      const daysRemaining = Math.max(0, Math.ceil((activeLicense.expiresAt - now) / (1000 * 60 * 60 * 24)));
+      return res.json({
+        status: 'licensed',
+        license: {
+          key: activeLicense.key,
+          expiresAt: activeLicense.expiresAt,
+          daysRemaining,
+          durationDays: activeLicense.durationDays,
+        },
+        trial: { active: false, trialEndsAt, daysRemaining: 0 },
+      });
+    }
+
+    return res.json({
+      status: trialActive ? 'trial' : 'expired',
+      trial: { active: trialActive, trialEndsAt, daysRemaining: trialDaysRemaining },
+      license: null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /auth/activate-license — user activates a license key
+authRouter.post('/activate-license', requireAuth, async (req, res, next) => {
+  try {
+    const { key } = req.body || {};
+    if (!key) return res.status(400).json({ error: 'License key is required' });
+
+    const user = await User.findById(req.userId).lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const license = await LicenseKey.findOne({ key: String(key).trim().toUpperCase() });
+    if (!license) return res.status(404).json({ error: 'Invalid license key' });
+
+    if (license.status === 'revoked') return res.status(400).json({ error: 'This license key has been revoked' });
+    if (license.status === 'expired') return res.status(400).json({ error: 'This license key has expired' });
+    if (license.status === 'active') {
+      // Allow re-activation by the same user (e.g. re-install)
+      if (String(license.activatedByUserId) !== String(req.userId)) {
+        return res.status(400).json({ error: 'This license key is already in use' });
+      }
+    }
+
+    // Check email matches
+    if (license.assignedEmail.toLowerCase() !== user.email.toLowerCase()) {
+      return res.status(400).json({ error: 'This license key is not assigned to your email address' });
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + license.durationDays * 24 * 60 * 60 * 1000);
+
+    license.status = 'active';
+    license.activatedByUserId = req.userId;
+    license.activatedAt = now;
+    license.expiresAt = expiresAt;
+    await license.save();
+
+    const daysRemaining = license.durationDays;
+    res.json({
+      ok: true,
+      license: {
+        key: license.key,
+        expiresAt,
+        daysRemaining,
+        durationDays: license.durationDays,
+      },
+    });
   } catch (err) {
     next(err);
   }

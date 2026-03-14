@@ -7,6 +7,18 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // Dev-only: serve admin.html for all /admin and /admin/* routes
+    {
+      name: 'admin-html-fallback',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          if (req.url && (req.url === '/admin' || req.url.startsWith('/admin/')) && !req.url.includes('.')) {
+            req.url = '/admin.html';
+          }
+          next();
+        });
+      },
+    },
   ],
   resolve: {
     alias: {
@@ -29,7 +41,6 @@ export default defineConfig({
     },
   },
   server: {
-    // Serve admin.html at /admin in dev mode
     fs: { allow: ['.'] },
   },
 })

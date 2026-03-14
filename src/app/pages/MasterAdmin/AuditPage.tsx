@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { API_URL } from '../../config/api';
+import { ADMIN_API_URL as API_URL } from '../../config/api';
 import { toast } from 'sonner';
 import { ArrowLeft, FileText, User, Building2, Clock } from 'lucide-react';
 

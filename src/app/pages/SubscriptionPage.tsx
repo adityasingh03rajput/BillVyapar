@@ -1,184 +1,80 @@
 import { useState, useEffect } from 'react';
 import { AppLayout } from '../components/AppLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
-import { 
-  Check, 
-  Crown, 
-  Calendar,
-  AlertCircle,
-  Zap
-} from 'lucide-react';
+import { Badge } from '../components/ui/badge';
+import { Check, AlertCircle, Key, Clock, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
-import { cacheSubscriptionToken, validateSubscriptionTokenOnline } from '../utils/subscriptionValidation';
+
+interface LicenseStatus {
+  status: 'trial' | 'licensed' | 'expired';
+  trial: { active: boolean; trialEndsAt: string; daysRemaining: number };
+  license: {
+    key: string;
+    expiresAt: string;
+    daysRemaining: number;
+    durationDays: number;
+  } | null;
+}
 
 export function SubscriptionPage() {
-  const [subscription, setSubscription] = useState<any>(null);
+  const [status, setStatus] = useState<LicenseStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [purchasing, setPurchasing] = useState(false);
-  const [myReferralCode, setMyReferralCode] = useState<string>('');
-  const [referralCode, setReferralCode] = useState<string>('');
-  const [referralValidating, setReferralValidating] = useState(false);
-  const [referralDiscountPercent, setReferralDiscountPercent] = useState<number>(0);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [activating, setActivating] = useState(false);
   const { accessToken, deviceId } = useAuth();
 
-  const apiUrl = API_URL;
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const profileId = currentProfile?.id;
+  useEffect(() => { loadStatus(); }, []);
 
-  useEffect(() => {
-    loadSubscription();
-    void loadMyReferralCode();
-  }, []);
-
-  const loadMyReferralCode = async () => {
+  const loadStatus = async () => {
     try {
-      const response = await fetch(`${apiUrl}/subscription/referral-code`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'X-Device-ID': deviceId,
-        },
+      const res = await fetch(`${API_URL}/auth/license-status`, {
+        headers: { Authorization: `Bearer ${accessToken}`, 'X-Device-ID': deviceId },
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return;
-      if (data?.referralCode) setMyReferralCode(String(data.referralCode));
+      const data = await res.json();
+      if (!data.error) setStatus(data);
     } catch {
-      // ignore
-    }
-  };
-
-  const validateReferralCode = async () => {
-    const code = String(referralCode || '').trim();
-    if (!code) {
-      setReferralDiscountPercent(0);
-      return;
-    }
-
-    setReferralValidating(true);
-    try {
-      const response = await fetch(`${apiUrl}/subscription/referral/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          'X-Device-ID': deviceId,
-        },
-        body: JSON.stringify({ referralCode: code }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.error || 'Invalid referral code');
-      setReferralDiscountPercent(Number(data?.discountPercent || 10));
-      toast.success(`Referral applied: ${Number(data?.discountPercent || 10)}% off`);
-    } catch (e: any) {
-      setReferralDiscountPercent(0);
-      toast.error(e?.message || 'Invalid referral code');
-    } finally {
-      setReferralValidating(false);
-    }
-  };
-
-  const loadSubscription = async () => {
-    try {
-      if (profileId) {
-        const online = await validateSubscriptionTokenOnline({
-          apiUrl,
-          accessToken: accessToken || '',
-          deviceId,
-          profileId,
-        });
-        if (online.ok && online.token) {
-          cacheSubscriptionToken(profileId, online.token);
-        }
-
-        const response = await fetch(`${apiUrl}/subscription/validate`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'X-Device-ID': deviceId,
-            'X-Profile-ID': profileId,
-          },
-        });
-        const data = await response.json();
-        if (!data?.error && data?.subscription) setSubscription(data.subscription);
-      } else {
-        const response = await fetch(`${apiUrl}/subscription`, {
-          headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId },
-        });
-        const data = await response.json();
-        if (!data.error) setSubscription(data);
-      }
-    } catch (error) {
-      toast.error('Failed to load subscription');
+      toast.error('Failed to load license status');
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePurchase = async (plan: 'monthly' | 'yearly') => {
-    setPurchasing(true);
+  const handleActivate = async () => {
+    const key = licenseKey.trim().toUpperCase();
+    if (!key) return toast.error('Please enter a license key');
+    setActivating(true);
     try {
-      const response = await fetch(`${apiUrl}/subscription/update`, {
+      const res = await fetch(`${API_URL}/auth/activate-license`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
         },
-        body: JSON.stringify({ plan, referralCode: String(referralCode || '').trim() || null }),
+        body: JSON.stringify({ key }),
       });
-
-      const data = await response.json();
-      
+      const data = await res.json();
       if (data.error) {
         toast.error(data.error);
       } else {
-        toast.success(`${plan === 'monthly' ? 'Monthly' : 'Yearly'} plan activated!`);
-        setSubscription(data);
-        await loadSubscription();
+        toast.success('License activated successfully!');
+        setLicenseKey('');
+        await loadStatus();
       }
-    } catch (error) {
-      toast.error('Failed to update subscription');
+    } catch {
+      toast.error('Failed to activate license');
     } finally {
-      setPurchasing(false);
+      setActivating(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
-  const isActive = subscription && new Date(subscription.endDate) > new Date();
-  const daysRemaining = subscription 
-    ? Math.ceil((new Date(subscription.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
-
-  const features = [
-    'Unlimited business profiles',
-    'Create unlimited documents (Invoices, Quotations, Orders, etc.)',
-    'Customer & item catalog management',
-    'GST calculations & compliance',
-    'PDF export & sharing',
-    'Real-time analytics dashboard',
-    'Offline mode with cloud sync',
-    'Document version tracking',
-    'Document conversion (Quote to Invoice, etc.)',
-    'Single-device security',
-    'Payment tracking & reminders',
-    'Custom fields & templates',
-  ];
-
-  const baseMonthly = 499;
-  const baseYearly = 4999;
-  const discount = Math.max(0, Math.min(100, Number(referralDiscountPercent || 0)));
-  const priceAfterDiscount = (base: number) => Math.round(base * (1 - discount / 100));
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
   if (loading) {
     return (
@@ -190,240 +86,122 @@ export function SubscriptionPage() {
     );
   }
 
+  const isLicensed = status?.status === 'licensed';
+  const isTrial = status?.status === 'trial';
+  const isExpired = status?.status === 'expired';
+
   return (
     <AppLayout>
-      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Subscription Plans</h1>
-          <p className="text-muted-foreground">Choose the plan that works best for you</p>
+      <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-foreground">Subscription</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage your BillVyapar license</p>
         </div>
 
-        {/* Current Subscription Status */}
-        {subscription && (
-          <Card className={`mb-8 ${isActive ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
-            <CardContent className="py-6">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  {isActive ? (
-                    <Check className="h-6 w-6 text-green-600 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-6 w-6 text-yellow-600 mt-0.5" />
+        {/* Status Card */}
+        {status && (
+          <Card className={
+            isLicensed ? 'border-green-200 bg-green-50' :
+            isTrial ? 'border-blue-200 bg-blue-50' :
+            'border-red-200 bg-red-50'
+          }>
+            <CardContent className="py-5">
+              <div className="flex items-start gap-3">
+                {isLicensed && <ShieldCheck className="h-6 w-6 text-green-600 mt-0.5 shrink-0" />}
+                {isTrial && <Clock className="h-6 w-6 text-blue-600 mt-0.5 shrink-0" />}
+                {isExpired && <AlertCircle className="h-6 w-6 text-red-600 mt-0.5 shrink-0" />}
+                <div className="flex-1">
+                  {isLicensed && status.license && (
+                    <>
+                      <p className="font-semibold text-green-900">License Active</p>
+                      <p className="text-sm text-green-700 mt-0.5">
+                        {status.license.daysRemaining} days remaining · Expires {formatDate(status.license.expiresAt)}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1 font-mono">{status.license.key}</p>
+                    </>
                   )}
-                  <div>
-                    <h3 className={`text-lg font-semibold ${isActive ? 'text-green-900' : 'text-yellow-900'}`}>
-                      {isActive ? 'Active Subscription' : 'Subscription Expired'}
-                    </h3>
-                    <p className={`text-sm mt-1 ${isActive ? 'text-green-700' : 'text-yellow-700'}`}>
-                      <span className="font-medium capitalize">{subscription.plan}</span> Plan
-                      {' • '}
-                      {isActive 
-                        ? `${daysRemaining} days remaining`
-                        : `Expired on ${formatDate(subscription.endDate)}`
-                      }
-                    </p>
-                    <p className={`text-xs mt-1 ${isActive ? 'text-green-600' : 'text-yellow-600'}`}>
-                      Valid from {formatDate(subscription.startDate)} to {formatDate(subscription.endDate)}
-                    </p>
-                  </div>
+                  {isTrial && (
+                    <>
+                      <p className="font-semibold text-blue-900">Free Trial</p>
+                      <p className="text-sm text-blue-700 mt-0.5">
+                        {status.trial.daysRemaining} day{status.trial.daysRemaining !== 1 ? 's' : ''} remaining · Ends {formatDate(status.trial.trialEndsAt)}
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">Activate a license key before your trial ends to keep access.</p>
+                    </>
+                  )}
+                  {isExpired && (
+                    <>
+                      <p className="font-semibold text-red-900">Access Expired</p>
+                      <p className="text-sm text-red-700 mt-0.5">
+                        Your 7-day trial has ended. Activate a license key to restore access.
+                      </p>
+                    </>
+                  )}
                 </div>
-                {!isActive && (
-                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                    Renew Required
-                  </Badge>
-                )}
+                <Badge variant="outline" className={
+                  isLicensed ? 'bg-green-100 text-green-800 border-green-300' :
+                  isTrial ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                  'bg-red-100 text-red-800 border-red-300'
+                }>
+                  {isLicensed ? 'Licensed' : isTrial ? 'Trial' : 'Expired'}
+                </Badge>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-12">
-          {/* Monthly Plan */}
-          <Card className="relative border-2 hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-center justify-between mb-2">
-                <CardTitle className="text-2xl">Monthly Plan</CardTitle>
-                <Zap className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="mt-4">
-                {discount > 0 ? (
-                  <div className="flex items-end gap-3 flex-wrap">
-                    <span className="text-4xl font-bold text-foreground">₹{priceAfterDiscount(baseMonthly)}</span>
-                    <span className="text-muted-foreground">/month</span>
-                    <span className="text-sm text-muted-foreground line-through">₹{baseMonthly}</span>
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{discount}% OFF</Badge>
-                  </div>
-                ) : (
-                  <>
-                    <span className="text-4xl font-bold text-foreground">₹{baseMonthly}</span>
-                    <span className="text-muted-foreground">/month</span>
-                  </>
-                )}
-              </div>
-              <CardDescription className="mt-2">
-                Perfect for trying out BillVyapar
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                className="w-full mb-6"
-                onClick={() => handlePurchase('monthly')}
-                disabled={purchasing || (subscription?.plan === 'monthly' && isActive)}
-              >
-                {purchasing ? 'Processing...' : 
-                  subscription?.plan === 'monthly' && isActive ? 'Current Plan' : 'Get Monthly Plan'}
-              </Button>
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-foreground/80 mb-3">Everything included:</p>
-                {features.slice(0, 6).map((feature, index) => (
-                  <div key={index} className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-sm text-foreground/80">{feature}</span>
-                  </div>
-                ))}
-                <p className="text-xs text-muted-foreground pt-2">+ 6 more features...</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Yearly Plan */}
-          <Card className="relative border-2 border-green-200 hover:shadow-xl transition-shadow bg-gradient-to-br from-green-50 to-white">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-              <Badge className="bg-green-600 text-white px-4 py-1">
-                <Crown className="h-3 w-3 mr-1 inline" />
-                Best Value - Save 17%
-              </Badge>
-            </div>
-            <CardHeader>
-              <div className="flex items-center justify-between mb-2">
-                <CardTitle className="text-2xl">Yearly Plan</CardTitle>
-                <Crown className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="mt-4">
-                {discount > 0 ? (
-                  <div className="flex items-end gap-3 flex-wrap">
-                    <span className="text-4xl font-bold text-foreground">₹{priceAfterDiscount(baseYearly)}</span>
-                    <span className="text-muted-foreground">/year</span>
-                    <span className="text-sm text-muted-foreground line-through">₹{baseYearly}</span>
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{discount}% OFF</Badge>
-                  </div>
-                ) : (
-                  <>
-                    <span className="text-4xl font-bold text-foreground">₹{baseYearly}</span>
-                    <span className="text-muted-foreground">/year</span>
-                  </>
-                )}
-              </div>
-              <CardDescription className="mt-2">
-                Save ₹999 compared to monthly billing
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                className="w-full mb-6 bg-green-600 hover:bg-green-700"
-                onClick={() => handlePurchase('yearly')}
-                disabled={purchasing || (subscription?.plan === 'yearly' && isActive)}
-              >
-                {purchasing ? 'Processing...' : 
-                  subscription?.plan === 'yearly' && isActive ? 'Current Plan' : 'Get Yearly Plan'}
-              </Button>
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-foreground/80 mb-3">All features included:</p>
-                {features.map((feature, index) => (
-                  <div key={index} className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-sm text-foreground/80">{feature}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* FAQ / Info */}
-        <Card className="max-w-4xl mx-auto mb-8">
+        {/* License Key Activation */}
+        <Card>
           <CardHeader>
-            <CardTitle>Referral & Rewards</CardTitle>
-            <CardDescription>Invite friends and earn bonus days on their subscription purchase.</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Key className="h-4 w-4" />
+              Activate License Key
+            </CardTitle>
+            <CardDescription>
+              Enter the license key sent to your registered email address.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-semibold text-foreground mb-2">Your referral code</p>
-                <div className="flex items-center gap-2">
-                  <Input value={myReferralCode} readOnly placeholder="Loading..." />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(myReferralCode || '');
-                        toast.success('Referral code copied');
-                      } catch {
-                        toast.error('Failed to copy');
-                      }
-                    }}
-                    disabled={!myReferralCode}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">Share this code. Your friend gets 10% off, and you get bonus days when they purchase.</p>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground mb-2">Have a referral code?</p>
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={referralCode}
-                    onChange={(e) => setReferralCode(e.target.value)}
-                    placeholder="Enter referral code"
-                  />
-                  <Button type="button" onClick={validateReferralCode} disabled={referralValidating}>
-                    {referralValidating ? 'Checking...' : 'Apply'}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">Applied referral gives 10% off on purchase. Bonus is credited to the referrer after you buy a plan.</p>
-              </div>
+          <CardContent className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                value={licenseKey}
+                onChange={e => setLicenseKey(e.target.value.toUpperCase())}
+                placeholder="BVYP-XXXX-XXXX-XXXX"
+                className="font-mono tracking-widest"
+                onKeyDown={e => e.key === 'Enter' && handleActivate()}
+              />
+              <Button onClick={handleActivate} disabled={activating || !licenseKey.trim()}>
+                {activating ? 'Activating...' : 'Activate'}
+              </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              License keys are tied to your email address. Contact support if you haven't received yours.
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="max-w-4xl mx-auto">
+        {/* Features */}
+        <Card>
           <CardHeader>
-            <CardTitle>Subscription Details</CardTitle>
+            <CardTitle className="text-base">What's included</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h4 className="font-semibold text-foreground mb-1">How does subscription work?</h4>
-              <p className="text-sm text-muted-foreground">
-                Your subscription starts from the exact date of purchase and remains active for the selected duration (30 days for monthly, 365 days for yearly).
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-foreground mb-1">What happens when my subscription expires?</h4>
-              <p className="text-sm text-muted-foreground">
-                All your data remains fully accessible and secure. However, you won't be able to create new documents, edit existing ones, or export PDFs until you renew your subscription.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-foreground mb-1">Can I switch between plans?</h4>
-              <p className="text-sm text-muted-foreground">
-                Yes! You can upgrade or downgrade at any time. When you switch plans, the new subscription period starts from the date of change.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-foreground mb-1">Is my data safe?</h4>
-              <p className="text-sm text-muted-foreground">
-                Absolutely. We use enterprise-grade encryption and security measures. Your data is automatically backed up and synced to the cloud. Single-device login ensures only you can access your account.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-foreground mb-1">Demo Mode</h4>
-              <p className="text-sm text-muted-foreground">
-                This is a demonstration version. In production, subscription payments would be processed through a secure payment gateway.
-              </p>
-            </div>
+          <CardContent>
+            <ul className="space-y-2">
+              {[
+                'Unlimited business profiles',
+                'Invoices, Quotations, Orders & more',
+                'Customer & item catalog management',
+                'GST calculations & compliance',
+                'PDF export & sharing',
+                'Real-time analytics dashboard',
+                'Offline mode with cloud sync',
+              ].map((f, i) => (
+                <li key={i} className="flex items-center gap-2 text-sm text-foreground/80">
+                  <Check className="h-4 w-4 text-green-600 shrink-0" />
+                  {f}
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       </div>

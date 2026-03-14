@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { API_URL } from '../../config/api';
+import { ADMIN_API_URL as API_URL } from '../../config/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Search, Users as UsersIcon, FileText, ShoppingCart, Building2, RefreshCw } from 'lucide-react';
 
@@ -179,7 +179,7 @@ export function MasterAdminUsersPage() {
                   )}
                   {user.tenant && (
                     <button
-                      onClick={() => navigate(`/master-admin/tenants/${user.tenant.id}`)}
+                      onClick={() => navigate(`/tenants/${user.tenant.id}`)}
                       className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
                     >
                       <Building2 className="h-4 w-4 mr-2" />

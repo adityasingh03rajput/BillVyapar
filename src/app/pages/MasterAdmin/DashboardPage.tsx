@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { API_URL } from '../../config/api';
+import { ADMIN_API_URL as API_URL } from '../../config/api';
 import { toast } from 'sonner';
-import { Users, AlertCircle, CheckCircle, Clock, DollarSign, LogOut, FileText, Package, Building2, TrendingUp } from 'lucide-react';
+import { Users, AlertCircle, CheckCircle, Clock, DollarSign, LogOut, FileText, Package, Building2, TrendingUp, Key } from 'lucide-react';
 
 export function MasterAdminDashboardPage() {
   const navigate = useNavigate();
@@ -45,7 +45,7 @@ export function MasterAdminDashboardPage() {
   const handleLogout = () => {
     localStorage.removeItem('masterAdminToken');
     localStorage.removeItem('masterAdmin');
-    navigate('/login');
+    navigate('/');
   };
 
   if (loading) {
@@ -241,6 +241,15 @@ export function MasterAdminDashboardPage() {
               <TrendingUp className="h-8 w-8 mb-3 text-gray-700" />
               <h3 className="text-lg font-semibold mb-1 text-gray-900">Audit Logs</h3>
               <p className="text-sm text-gray-600">Track all admin actions</p>
+            </button>
+
+            <button
+              onClick={() => navigate('/license-keys')}
+              className="bg-white hover:bg-gray-50 border-2 border-blue-200 rounded-xl p-6 text-left transition-colors"
+            >
+              <Key className="h-8 w-8 mb-3 text-blue-600" />
+              <h3 className="text-lg font-semibold mb-1 text-gray-900">License Keys</h3>
+              <p className="text-sm text-gray-600">Generate & manage license keys</p>
             </button>
           </div>
         </div>
