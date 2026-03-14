@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { requireAuth, requireValidDeviceSession } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/subscription.js';
 import { requireProfile } from '../middleware/profile.js';
-import { enforceLimit } from '../middleware/subscriberEnforcement.js';
+import { enforceLimit, enforceFeature } from '../middleware/subscriberEnforcement.js';
 import { Document } from '../models/Document.js';
 import { Payment } from '../models/Payment.js';
 import { Counter } from '../models/Counter.js';
