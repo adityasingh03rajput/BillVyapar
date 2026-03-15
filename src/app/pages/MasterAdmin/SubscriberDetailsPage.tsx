@@ -76,6 +76,11 @@ export function MasterAdminSubscriberDetailsPage() {
   const [resetPw, setResetPw] = useState('');
   const [resetting, setResetting] = useState(false);
 
+  // Extend license
+  const [extendModal, setExtendModal] = useState(false);
+  const [extendDays, setExtendDays] = useState(30);
+  const [extending, setExtending] = useState(false);
+
   // Sessions
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -158,6 +163,22 @@ export function MasterAdminSubscriberDetailsPage() {
       else { toast.success('Password reset successfully'); setResetModal(false); setResetPw(''); }
     } catch { toast.error('Failed to reset password'); }
     finally { setResetting(false); }
+  };
+
+  const extendLicense = async () => {
+    if (!extendDays || extendDays <= 0) { toast.error('Enter a valid number of days'); return; }
+    setExtending(true);
+    try {
+      const res = await fetch(`${API_URL}/master-admin/licenses/${id}/extend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+        body: JSON.stringify({ days: extendDays }),
+      });
+      const json = await res.json();
+      if (json.error) toast.error(json.error);
+      else { toast.success(`License extended by ${extendDays} days`); setExtendModal(false); load(); }
+    } catch { toast.error('Failed to extend license'); }
+    finally { setExtending(false); }
   };
 
   const loadSessions = async () => {
@@ -285,11 +306,27 @@ export function MasterAdminSubscriberDetailsPage() {
               <InfoRow label="Key"            value={license.key} />
               <InfoRow label="Status"         value={license.status} />
               <InfoRow label="Duration"       value={license.durationDays ? `${license.durationDays} days` : null} />
-              <InfoRow label="Start"          value={license.licenseStartAt ? new Date(license.licenseStartAt).toLocaleDateString('en-IN') : null} />
-              <InfoRow label="Expiry"         value={license.licenseEndAt  ? new Date(license.licenseEndAt).toLocaleDateString('en-IN')  : null} />
+              <InfoRow label="Activated"      value={license.activatedAt ? new Date(license.activatedAt).toLocaleDateString('en-IN') : null} />
+              <InfoRow label="Expiry"         value={license.expiresAt ? new Date(license.expiresAt).toLocaleDateString('en-IN') : null} />
               <InfoRow label="Days Remaining" value={license.daysRemaining != null ? `${license.daysRemaining} days` : null} />
+              <button
+                onClick={() => { setExtendDays(30); setExtendModal(true); }}
+                className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-2xl text-xs font-bold"
+                style={{ background: '#eef2ff', color: '#6366f1', border: '1.5px solid #c7d2fe' }}>
+                <RefreshCw className="h-3.5 w-3.5" />Extend / Renew License
+              </button>
             </>
-          ) : <p className="text-xs font-medium py-4 text-center" style={{ color: '#94a3b8' }}>No license found</p>}
+          ) : (
+            <>
+              <p className="text-xs font-medium py-4 text-center" style={{ color: '#94a3b8' }}>No license found</p>
+              <button
+                onClick={() => { setExtendDays(30); setExtendModal(true); }}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2 rounded-2xl text-xs font-bold"
+                style={{ background: '#eef2ff', color: '#6366f1', border: '1.5px solid #c7d2fe' }}>
+                <RefreshCw className="h-3.5 w-3.5" />Assign License
+              </button>
+            </>
+          )}
         </Card>
       </div>
 
@@ -418,6 +455,67 @@ export function MasterAdminSubscriberDetailsPage() {
           </div>
         )}
       </Card>
+
+      {/* Extend License Modal */}
+      {extendModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-[50] p-4"
+          style={{ background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)' }}>
+          <div className="w-full max-w-sm rounded-3xl overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.97)', border: '1.5px solid rgba(255,255,255,0.9)', boxShadow: '0 32px 80px rgba(99,102,241,0.15)' }}>
+            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1.5px solid #f1f5f9' }}>
+              <h2 className="text-base font-black" style={{ color: '#1e1b4b' }}>Extend / Renew License</h2>
+              <button onClick={() => setExtendModal(false)} className="p-1.5 rounded-xl"
+                style={{ background: '#f1f5f9', color: '#94a3b8' }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm font-medium" style={{ color: '#64748b' }}>
+                Extending license for <span className="font-black" style={{ color: '#1e1b4b' }}>{subscriber.email}</span>
+              </p>
+              {data?.license && (
+                <p className="text-xs px-3 py-2 rounded-xl font-medium"
+                  style={{ background: data.license.status === 'active' ? '#d1fae5' : '#ffe4e6', color: data.license.status === 'active' ? '#059669' : '#f43f5e' }}>
+                  Current expiry: {data.license.expiresAt ? new Date(data.license.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                  {data.license.status === 'expired' ? ' (expired)' : ''}
+                </p>
+              )}
+              <div>
+                <label className="text-xs font-bold block mb-1.5" style={{ color: '#475569' }}>Extend by (days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={extendDays}
+                  onChange={e => setExtendDays(Number(e.target.value))}
+                  style={{
+                    background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#1e1b4b',
+                    borderRadius: 16, padding: '10px 14px', fontSize: 14, fontWeight: 700,
+                    width: '100%', outline: 'none',
+                  }}
+                />
+                <p className="text-[10px] mt-1.5 font-medium" style={{ color: '#94a3b8' }}>
+                  New expiry will be: {(() => {
+                    const base = data?.license?.expiresAt && new Date(data.license.expiresAt) > new Date()
+                      ? new Date(data.license.expiresAt)
+                      : new Date();
+                    return new Date(base.getTime() + extendDays * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                  })()}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 py-5" style={{ borderTop: '1.5px solid #f1f5f9', background: '#fafafa' }}>
+              <button onClick={() => setExtendModal(false)}
+                className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold"
+                style={{ background: '#f1f5f9', border: '1.5px solid #e2e8f0', color: '#64748b' }}>Cancel</button>
+              <button onClick={extendLicense} disabled={extending}
+                className="flex-1 px-4 py-3 rounded-2xl text-sm font-black text-white disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#6366f1,#818cf8)', boxShadow: '0 6px 20px rgba(99,102,241,0.3)' }}>
+                {extending ? 'Extending…' : `Extend ${extendDays}d`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reset Password Modal */}
       {resetModal && (

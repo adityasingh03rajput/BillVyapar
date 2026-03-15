@@ -82,7 +82,7 @@ masterAdminLicensesRouter.post('/:tenantId', async (req, res, next) => {
   }
 });
 
-// Extend license — extends the active LicenseKey expiresAt
+// Extend license — extends the active LicenseKey expiresAt (works on expired keys too)
 masterAdminLicensesRouter.post('/:tenantId/extend', async (req, res, next) => {
   try {
     const { days } = req.body;
@@ -91,15 +91,23 @@ masterAdminLicensesRouter.post('/:tenantId/extend', async (req, res, next) => {
     const subscriber = await Subscriber.findById(req.params.tenantId).lean();
     if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
 
+    // Find most recent key (active or expired) — not revoked
     const license = await LicenseKey.findOne({
       activatedByUserId: subscriber.ownerUserId,
-      status: 'active',
-    });
-    if (!license) return res.status(404).json({ error: 'No active license found for this subscriber' });
+      status: { $in: ['active', 'expired'] },
+    }).sort({ expiresAt: -1 });
+    if (!license) return res.status(404).json({ error: 'No license found for this subscriber' });
 
     const before = license.toObject();
-    license.expiresAt = new Date(new Date(license.expiresAt).getTime() + Number(days) * 24 * 60 * 60 * 1000);
+    const base = license.expiresAt && new Date(license.expiresAt) > new Date()
+      ? new Date(license.expiresAt)   // still in future — extend from current expiry
+      : new Date();                   // already expired — extend from now
+    license.expiresAt = new Date(base.getTime() + Number(days) * 24 * 60 * 60 * 1000);
+    license.status = 'active';        // reactivate if it was expired
     await license.save();
+
+    // Sync subscriber status
+    await Subscriber.updateOne({ _id: subscriber._id }, { $set: { status: 'active' } });
 
     await logAudit(req.masterAdminId, 'license_extended', subscriber._id, before, license.toObject(), { days });
 
