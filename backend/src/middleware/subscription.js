@@ -67,7 +67,8 @@ async function checkAccess(userId) {
     { $set: { status: 'expired' } }
   ).catch(() => {});
 
-  // ── 2. Trial window ────────────────────────────────────────────────────────  const extensionDays = Number(subscriber?.trialExtensionDays || 0);
+  // ── 2. Trial window ────────────────────────────────────────────────────────
+  const extensionDays = Number(subscriber?.trialExtensionDays || 0);
   const trialEnd = new Date(user.createdAt.getTime() + (TRIAL_DAYS + extensionDays) * 24 * 60 * 60 * 1000);
 
   if (now <= trialEnd) {

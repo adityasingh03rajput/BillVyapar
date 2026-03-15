@@ -88,6 +88,24 @@ export function MasterAdminUsersPage() {
                           SUBSCRIBER
                         </span>
                       )}
+                      {user.license && (
+                        <span className="text-[10px] px-2.5 py-1 rounded-full font-black"
+                          style={{
+                            background: user.license.status === 'active' ? '#d1fae5' : '#fee2e2',
+                            color: user.license.status === 'active' ? '#059669' : '#dc2626',
+                            border: `1.5px solid ${user.license.status === 'active' ? '#6ee7b7' : '#fca5a5'}`,
+                          }}>
+                          {user.license.status === 'active'
+                            ? `LICENSE · ${user.license.daysRemaining}d left`
+                            : user.license.status.toUpperCase()}
+                        </span>
+                      )}
+                      {!user.license && (
+                        <span className="text-[10px] px-2.5 py-1 rounded-full font-black"
+                          style={{ background: '#fef9c3', color: '#ca8a04', border: '1.5px solid #fde68a' }}>
+                          TRIAL
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-0.5">
                       <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: '#64748b' }}>

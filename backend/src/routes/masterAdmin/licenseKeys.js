@@ -70,12 +70,14 @@ masterAdminLicenseKeysRouter.post('/', async (req, res, next) => {
       notes: notes || null,
     });
 
+    // Look up subscriber for audit tenantId
+    const user = await User.findOne({ email: String(assignedEmail).toLowerCase().trim() }).lean();
+    const subscriber = user ? await Subscriber.findOne({ ownerUserId: user._id }).lean() : null;
+
     await AuditLog.create({
       actorMasterAdminId: req.masterAdminId,
       action: 'license_key_generated',
-      tenantId: await User.findOne({ email: String(assignedEmail).toLowerCase().trim() }).lean()
-        .then(u => u ? Subscriber.findOne({ ownerUserId: u._id }).lean().then(s => s?._id ?? null) : null)
-        .catch(() => null),
+      tenantId: subscriber?._id ?? null,
       after: { key, assignedEmail, durationDays },
     });
 

@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import { Subscriber } from '../../models/Subscriber.js';
-import { SubscriberLicense } from '../../models/SubscriberLicense.js';
+import { LicenseKey } from '../../models/LicenseKey.js';
 import { User } from '../../models/User.js';
 import { AuditLog } from '../../models/AuditLog.js';
 import { Session } from '../../models/Session.js';
@@ -10,6 +9,49 @@ import { requireMasterAdmin } from '../../middleware/masterAdmin.js';
 export const masterAdminSubscribersRouter = Router();
 
 masterAdminSubscribersRouter.use(requireMasterAdmin);
+
+const TRIAL_DAYS = 7;
+
+// Compute real-time status from LicenseKey + trial window, then sync DB if stale
+async function resolveStatus(subscriber) {
+  const user = await User.findById(subscriber.ownerUserId).lean();
+  if (!user) return subscriber.status; // can't determine, keep as-is
+
+  // Suspended is always authoritative — admin set it manually
+  if (subscriber.status === 'suspended') return 'suspended';
+
+  const now = new Date();
+
+  // Check active license key
+  const activeLicense = await LicenseKey.findOne({
+    activatedByUserId: subscriber.ownerUserId,
+    status: 'active',
+    expiresAt: { $gt: now },
+  }).lean();
+
+  if (activeLicense) {
+    if (subscriber.status !== 'active') {
+      await Subscriber.updateOne({ _id: subscriber._id }, { $set: { status: 'active' } });
+    }
+    return 'active';
+  }
+
+  // Check trial window
+  const extensionDays = Number(subscriber.trialExtensionDays || 0);
+  const trialEnd = new Date(user.createdAt.getTime() + (TRIAL_DAYS + extensionDays) * 24 * 60 * 60 * 1000);
+  if (now <= trialEnd) {
+    if (subscriber.status !== 'active') {
+      await Subscriber.updateOne({ _id: subscriber._id }, { $set: { status: 'active' } });
+    }
+    return 'active';
+  }
+
+  // Expired
+  if (subscriber.status !== 'expired') {
+    await Subscriber.updateOne({ _id: subscriber._id }, { $set: { status: 'expired' } });
+  }
+  return 'expired';
+}
 
 async function logAudit(actorId, action, subscriberId, before, after, metadata) {
   await AuditLog.create({
@@ -26,9 +68,9 @@ async function logAudit(actorId, action, subscriberId, before, after, metadata) 
 masterAdminSubscribersRouter.get('/', async (req, res, next) => {
   try {
     const { status, search, page = 1, limit = 50 } = req.query;
-    const filter = {};
 
-    if (status) filter.status = status;
+    // Build base filter (status filter applied after real-time resolution)
+    const filter = {};
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -44,14 +86,22 @@ masterAdminSubscribersRouter.get('/', async (req, res, next) => {
       .limit(Number(limit))
       .lean();
 
-    const total = await Subscriber.countDocuments(filter);
-
-    res.json({
-      subscribers: subscribers.map(s => ({
+    // Resolve real-time status for each subscriber
+    const resolved = await Promise.all(
+      subscribers.map(async (s) => ({
         ...s,
         _id: String(s._id),
         ownerUserId: String(s.ownerUserId),
-      })),
+        status: await resolveStatus(s),
+      }))
+    );
+
+    // Apply status filter after resolution
+    const filtered = status ? resolved.filter(s => s.status === status) : resolved;
+    const total = await Subscriber.countDocuments(filter);
+
+    res.json({
+      subscribers: filtered,
       total,
       page: Number(page),
       pages: Math.ceil(total / Number(limit)),
@@ -69,21 +119,30 @@ masterAdminSubscribersRouter.get('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Subscriber not found' });
     }
 
-    const license = await SubscriberLicense.findOne({ tenantId: subscriber._id }).populate('planId').lean();
+    const realStatus = await resolveStatus(subscriber);
     const user = await User.findById(subscriber.ownerUserId).lean();
+
+    const now = new Date();
+    const licenseKey = await LicenseKey.findOne({
+      activatedByUserId: subscriber.ownerUserId,
+    }).sort({ expiresAt: -1 }).lean();
 
     res.json({
       subscriber: {
         ...subscriber,
         _id: String(subscriber._id),
         ownerUserId: String(subscriber.ownerUserId),
+        status: realStatus,
       },
-      license: license ? {
-        ...license,
-        _id: String(license._id),
-        tenantId: String(license.tenantId),
-        planId: String(license.planId._id),
-        plan: license.planId,
+      license: licenseKey ? {
+        key: licenseKey.key,
+        status: licenseKey.status,
+        durationDays: licenseKey.durationDays,
+        activatedAt: licenseKey.activatedAt,
+        expiresAt: licenseKey.expiresAt,
+        daysRemaining: licenseKey.expiresAt
+          ? Math.max(0, Math.ceil((new Date(licenseKey.expiresAt) - now) / (1000 * 60 * 60 * 24)))
+          : null,
       } : null,
       ownerUser: user ? {
         id: String(user._id),
