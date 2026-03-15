@@ -306,8 +306,8 @@ export function MasterAdminSubscriberDetailsPage() {
               <InfoRow label="Key"            value={license.key} />
               <InfoRow label="Status"         value={license.status} />
               <InfoRow label="Duration"       value={license.durationDays ? `${license.durationDays} days` : null} />
-              <InfoRow label="Activated"      value={license.activatedAt ? new Date(license.activatedAt).toLocaleDateString('en-IN') : null} />
-              <InfoRow label="Expiry"         value={license.expiresAt ? new Date(license.expiresAt).toLocaleDateString('en-IN') : null} />
+              <InfoRow label="Activated"      value={(license.activatedAt || license.licenseStartAt) ? new Date(license.activatedAt || license.licenseStartAt).toLocaleDateString('en-IN') : null} />
+              <InfoRow label="Expiry"         value={(license.expiresAt || license.licenseEndAt) ? new Date(license.expiresAt || license.licenseEndAt).toLocaleDateString('en-IN') : null} />
               <InfoRow label="Days Remaining" value={license.daysRemaining != null ? `${license.daysRemaining} days` : null} />
               <button
                 onClick={() => { setExtendDays(30); setExtendModal(true); }}
@@ -476,7 +476,7 @@ export function MasterAdminSubscriberDetailsPage() {
               {data?.license && (
                 <p className="text-xs px-3 py-2 rounded-xl font-medium"
                   style={{ background: data.license.status === 'active' ? '#d1fae5' : '#ffe4e6', color: data.license.status === 'active' ? '#059669' : '#f43f5e' }}>
-                  Current expiry: {data.license.expiresAt ? new Date(data.license.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                  Current expiry: {(data.license.expiresAt || data.license.licenseEndAt) ? new Date(data.license.expiresAt || data.license.licenseEndAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                   {data.license.status === 'expired' ? ' (expired)' : ''}
                 </p>
               )}
@@ -495,8 +495,9 @@ export function MasterAdminSubscriberDetailsPage() {
                 />
                 <p className="text-[10px] mt-1.5 font-medium" style={{ color: '#94a3b8' }}>
                   New expiry will be: {(() => {
-                    const base = data?.license?.expiresAt && new Date(data.license.expiresAt) > new Date()
-                      ? new Date(data.license.expiresAt)
+                    const expiryDate = data?.license?.expiresAt || data?.license?.licenseEndAt;
+                    const base = expiryDate && new Date(expiryDate) > new Date()
+                      ? new Date(expiryDate)
                       : new Date();
                     return new Date(base.getTime() + extendDays * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
                   })()}
