@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { AppLayout } from '../components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -26,7 +27,8 @@ export function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [licenseKey, setLicenseKey] = useState('');
   const [activating, setActivating] = useState(false);
-  const { accessToken, deviceId } = useAuth();
+  const { accessToken, deviceId, setSubscriptionExpired } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => { loadStatus(); }, []);
 
@@ -64,7 +66,9 @@ export function SubscriptionPage() {
       } else {
         toast.success('License activated successfully!');
         setLicenseKey('');
+        setSubscriptionExpired(false);
         await loadStatus();
+        navigate('/dashboard', { replace: true });
       }
     } catch {
       toast.error('Failed to activate license');

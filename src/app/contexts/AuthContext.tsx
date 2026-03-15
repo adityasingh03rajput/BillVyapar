@@ -12,6 +12,8 @@ interface AuthContextType {
   accessToken: string | null;
   deviceId: string;
   loading: boolean;
+  subscriptionExpired: boolean;
+  setSubscriptionExpired: (v: boolean) => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, phone: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -22,6 +24,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [subscriptionExpired, setSubscriptionExpired] = useState(false);
   const [deviceId] = useState(() => {
     let id = localStorage.getItem('deviceId');
     if (!id) {
@@ -33,6 +36,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const apiUrl = API_URL;
+
+  // Global 402 interceptor — patch window.fetch once per session
+  useEffect(() => {
+    const original = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const res = await original(...args);
+      if (res.status === 402) {
+        setSubscriptionExpired(true);
+      }
+      return res;
+    };
+    return () => { window.fetch = original; };
+  }, []);
 
   useEffect(() => {
     // Check for existing session
@@ -104,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUser(userData);
     setAccessToken(data.session.access_token);
+    setSubscriptionExpired(false);
     localStorage.setItem('accessToken', data.session.access_token);
     localStorage.setItem('user', JSON.stringify(userData));
   };
@@ -152,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, deviceId, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, accessToken, deviceId, loading, subscriptionExpired, setSubscriptionExpired, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
