@@ -126,7 +126,7 @@ export function ModernTemplate({ doc, profile }: PdfTemplateProps) {
                 <div style={{ fontSize: 11, opacity: 0.85 }}>State: {formatStateDisplay(businessStateCode, null)}</div>
               )}
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                <div style={{ fontSize: 11, opacity: 0.9, fontWeight: 800 }}>Doc No: {doc.documentNumber}</div>
+                <div style={{ fontSize: 11, opacity: 0.9, fontWeight: 800 }}>Doc No: {safeText(doc.invoiceNo) || doc.documentNumber}</div>
                 {!!doc.date && <div style={{ fontSize: 11, opacity: 0.85 }}>Date: {doc.date}</div>}
                 {!!doc.dueDate && <div style={{ fontSize: 11, opacity: 0.85 }}>Due: {doc.dueDate}</div>}
               </div>
@@ -167,14 +167,13 @@ export function ModernTemplate({ doc, profile }: PdfTemplateProps) {
               <Box>
                 <Label>Details</Label>
                 <div style={{ marginTop: 10 }}>
-                  <KeyValue label="Doc No" value={doc.documentNumber} />
+                  <KeyValue label="Doc No" value={safeText(doc.invoiceNo) || doc.documentNumber} />
                   <KeyValueOptional label="Place of Supply" value={doc.placeOfSupply} />
                   <KeyValueOptional label="Due" value={doc.dueDate} />
                   {isOrder && !!doc.referenceDocumentNumber && (
                     <KeyValue label="Ref Quote" value={doc.referenceDocumentNumber} />
                   )}
                   <KeyValueOptional label="Order" value={isQuoteLike ? doc.orderNumber : null} />
-                  <KeyValueOptional label="Invoice No" value={doc.invoiceNo} />
                   <KeyValueOptional label="Challan No" value={doc.challanNo} />
                   <KeyValueOptional label="E-way Bill No" value={doc.ewayBillNo} />
                   <KeyValueOptional label="Vehicle No" value={doc.ewayBillVehicleNo} />

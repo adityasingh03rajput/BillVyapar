@@ -1,14 +1,25 @@
 import React from 'react';
 import type { PdfTemplateProps } from '../types';
-import { Hr, KeyValue, KeyValueOptional, Label, Money, Muted, safeText, SmallText, TemplateFrame, docTitleFromType, amountInWordsINR, formatInlineAddress, formatStateDisplay } from './TemplateFrame';
+import {
+  Hr,
+  KeyValue,
+  KeyValueOptional,
+  Label,
+  Money,
+  SmallText,
+  Muted,
+  safeText,
+  TemplateFrame,
+  amountInWordsINR,
+  formatInlineAddress,
+  formatStateDisplay,
+} from './TemplateFrame';
 
 export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
-  const taxes = Number(doc.totalCgst || 0) + Number(doc.totalSgst || 0) + Number(doc.totalIgst || 0);
-  const typeLower = String(doc.type || '').toLowerCase();
-  const isQuotation = typeLower === 'quotation';
-  const isOrder = typeLower === 'order';
-  const isQuoteLike = isQuotation || isOrder;
-  const businessStateCode = String(profile.gstin || '').trim().slice(0, 2);
+  const cgst = Number(doc.totalCgst || 0);
+  const sgst = Number(doc.totalSgst || 0);
+  const igst = Number(doc.totalIgst || 0);
+
   const customFields = Array.isArray(doc.customFields)
     ? doc.customFields
         .map((x) => ({ label: String(x?.label || '').trim(), value: String(x?.value || '').trim() }))
@@ -17,33 +28,32 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
 
   return (
     <TemplateFrame>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>{profile.businessName}</div>
+      {/* HEADER */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ maxWidth: 420 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{profile.businessName}</div>
           {!!profile.billingAddress && (
-            <div
-              style={{
-                fontSize: 11,
-                color: '#6B7280',
-                marginTop: 8,
-                maxWidth: 360,
-                whiteSpace: 'normal',
-                overflowWrap: 'anywhere',
-                wordBreak: 'break-word',
-              }}
-            >
+            <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>
               {formatInlineAddress(profile.billingAddress)}
             </div>
           )}
-          {!!profile.gstin && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>GSTIN: {profile.gstin}</div>}
-          {!!profile.gstin && businessStateCode && (
-            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>State: {formatStateDisplay(businessStateCode, null)}</div>
+          {!!(profile as any).phone && (
+            <div style={{ fontSize: 11, color: '#374151' }}>Phone no.: {(profile as any).phone}</div>
+          )}
+          {!!(profile as any).email && (
+            <div style={{ fontSize: 11, color: '#374151' }}>Email: {(profile as any).email}</div>
+          )}
+          {!!profile.gstin && (
+            <div style={{ fontSize: 11, color: '#374151', marginTop: 4 }}>GSTIN: {profile.gstin}</div>
+          )}
+          {!!profile.gstin && (
+            <div style={{ fontSize: 11, color: '#374151' }}>
+              State: {formatStateDisplay(profile.gstin.slice(0, 2), null)}
+            </div>
           )}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, color: '#111827' }}>{docTitleFromType(doc.type)}</div>
-          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>{doc.documentNumber}</div>
-          {!!doc.date && <div style={{ fontSize: 11, color: '#6B7280' }}>{doc.date}</div>}
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>Tax Invoice</div>
         </div>
       </div>
 
@@ -51,95 +61,140 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
         <Hr />
       </div>
 
-      <div style={{ display: 'flex', gap: 16, marginTop: 14, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Label>Customer</Label>
-          <div style={{ marginTop: 8, fontSize: 14, fontWeight: 800, color: '#111827' }}>{safeText(doc.customerName)}</div>
+      {/* BILL TO + INVOICE DETAILS */}
+      <div style={{ display: 'flex', gap: 30, marginTop: 16, alignItems: 'flex-start' }}>
+        {/* BILL TO */}
+        <div style={{ flex: 1 }}>
+          <Label>Bill To</Label>
+          <div style={{ fontWeight: 900, marginTop: 8, fontSize: 14, color: '#111827' }}>
+            {safeText(doc.customerName)}
+          </div>
           {!!doc.customerAddress && (
-            <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>{formatInlineAddress(doc.customerAddress)}</div>
+            <SmallText style={{ marginTop: 4 } as any}>
+              {formatInlineAddress(doc.customerAddress)}
+            </SmallText>
           )}
-          {!!doc.customerMobile && <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>Phone: {doc.customerMobile}</div>}
-          {!!doc.customerGstin && <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>GSTIN: {doc.customerGstin}</div>}
+          {!!doc.customerGstin && <SmallText>GSTIN: {doc.customerGstin}</SmallText>}
           {(!!doc.customerStateCode || !!doc.placeOfSupply) && (
-            <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>
+            <SmallText>
               State: {formatStateDisplay(doc.customerStateCode || null, doc.placeOfSupply || null)}
-            </div>
+            </SmallText>
           )}
-
+          {!!doc.customerMobile && <SmallText>Phone: {doc.customerMobile}</SmallText>}
           {!!doc.deliveryAddress && (
             <div style={{ marginTop: 10 }}>
               <Label>Ship To</Label>
-              <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280' }}>{formatInlineAddress(doc.deliveryAddress)}</div>
+              <SmallText style={{ marginTop: 6 } as any}>{formatInlineAddress(doc.deliveryAddress)}</SmallText>
             </div>
           )}
         </div>
-        <div style={{ width: 280, minWidth: 280 }}>
-          <Label>Details</Label>
+
+        {/* INVOICE DETAILS */}
+        <div style={{ width: 260 }}>
+          <Label>Invoice Details</Label>
           <div style={{ marginTop: 8 }}>
-            <KeyValueOptional label="Due" value={doc.dueDate} />
+            <KeyValue label="Invoice No." value={safeText(doc.invoiceNo) || safeText(doc.documentNumber)} />
+            <KeyValueOptional label="Date" value={doc.date} />
+            <KeyValueOptional label="Due Date" value={doc.dueDate} />
             <KeyValueOptional label="Place of Supply" value={doc.placeOfSupply} />
-            {isOrder && !!doc.referenceDocumentNumber && (
-              <KeyValue label="Ref Quote" value={doc.referenceDocumentNumber} />
-            )}
-            <KeyValueOptional label="Order" value={isQuoteLike ? doc.orderNumber : null} />
-            <KeyValueOptional label="Status" value={doc.paymentStatus} />
-            <KeyValueOptional label="Invoice No" value={doc.invoiceNo} />
             <KeyValueOptional label="Challan No" value={doc.challanNo} />
             <KeyValueOptional label="E-way Bill No" value={doc.ewayBillNo} />
             <KeyValueOptional label="Vehicle No" value={doc.ewayBillVehicleNo} />
             <KeyValueOptional label="Transport" value={doc.transport} />
-            <KeyValueOptional label="Transport ID" value={doc.transportId} />
           </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 16, borderTop: '1px solid #E5E7EB' }} />
-
-      <div style={{ marginTop: 10 }}>
-        <div style={{ display: 'flex', fontSize: 12, fontWeight: 900, color: '#111827', padding: '8px 0' }}>
-          <div style={{ width: 34, textAlign: 'center' }}>S.N.</div>
-          <div style={{ flex: 1 }}>Item</div>
-          <div style={{ width: 70, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Qty</div>
-          <div style={{ width: 90, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Rate</div>
-          <div style={{ width: 100, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8 }}>Total</div>
+      {/* ITEMS TABLE */}
+      <div style={{ marginTop: 20 }}>
+        <div
+          style={{
+            display: 'flex',
+            fontWeight: 900,
+            fontSize: 12,
+            color: '#111827',
+            borderBottom: '1px solid #ddd',
+            paddingBottom: 6,
+          }}
+        >
+          <div style={{ width: 30 }}>#</div>
+          <div style={{ flex: 1 }}>Item Name</div>
+          <div style={{ width: 80 }}>HSN/SAC</div>
+          <div style={{ width: 80, textAlign: 'right' }}>Qty</div>
+          <div style={{ width: 110, textAlign: 'right' }}>Price / Unit</div>
+          <div style={{ width: 120, textAlign: 'right' }}>GST Amount</div>
+          <div style={{ width: 120, textAlign: 'right' }}>Total</div>
         </div>
 
-        {doc.items?.map((it, idx) => (
-          <div key={idx} style={{ display: 'flex', gap: 0, alignItems: 'center', padding: '10px 0', borderTop: '1px solid #F3F4F6' }}>
-            <div style={{ width: 34, textAlign: 'center', fontSize: 11, color: '#111827', fontWeight: 800 }}>{idx + 1}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>{it.name}</div>
-              {!!it.hsnSac && <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>HSN/SAC: {it.hsnSac}</div>}
-              {!!it.sku && <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>SKU: {it.sku}</div>}
-              {!!it.servicePeriod && <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>Service: {it.servicePeriod}</div>}
-              {!!it.description && (
-                <div style={{ fontSize: 10, color: '#374151', marginTop: 4, whiteSpace: 'pre-line' }}>{it.description}</div>
-              )}
+        {doc.items?.map((it, i) => {
+          const itemTax =
+            Number(it.cgst || 0) + Number(it.sgst || 0) + Number(it.igst || 0);
+          const qty = Number(it.quantity || 0);
+          const rate = Number(it.rate || 0);
+          const discountPct = Number(it.discount || 0);
+          const gross = qty * rate;
+          const taxable = gross - (gross * discountPct) / 100;
+          const taxAmount = (taxable * itemTax) / 100;
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                padding: '10px 0',
+                borderBottom: '1px solid #f0f0f0',
+                fontSize: 12,
+                color: '#111827',
+                alignItems: 'flex-start',
+              }}
+            >
+              <div style={{ width: 30 }}>{i + 1}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800 }}>{it.name}</div>
+                {!!it.description && (
+                  <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2, whiteSpace: 'pre-line' }}>
+                    {it.description}
+                  </div>
+                )}
+                {!!it.sku && <div style={{ fontSize: 10, color: '#6B7280' }}>SKU: {it.sku}</div>}
+              </div>
+              <div style={{ width: 80 }}>{safeText(it.hsnSac) || '—'}</div>
+              <div style={{ width: 80, textAlign: 'right' }}>{qty}</div>
+              <div style={{ width: 110, textAlign: 'right' }}>
+                <Money value={rate} />
+              </div>
+              <div style={{ width: 120, textAlign: 'right' }}>
+                <Money value={taxAmount} />
+              </div>
+              <div style={{ width: 120, textAlign: 'right', fontWeight: 900 }}>
+                <Money value={Number(it.total || 0)} />
+              </div>
             </div>
-            <div style={{ width: 70, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>{Number(it.quantity || 0)}</div>
-            <div style={{ width: 90, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, color: '#111827' }}>
-              <Money value={Number(it.rate || 0)} />
-            </div>
-            <div style={{ width: 100, textAlign: 'right', borderLeft: '1px solid #E5E7EB', paddingLeft: 8, fontSize: 12, fontWeight: 900, color: '#111827' }}>
-              <Money value={Number(it.total || 0)} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{ width: 280, minWidth: 280 }}>
-          <KeyValue label="Subtotal" value={<Money value={Number(doc.subtotal || 0)} />} />
-          <KeyValue label="Taxes" value={<Money value={taxes} />} />
-          {isQuoteLike && !!Number(doc.packingHandlingCharges || 0) && (
-            <KeyValue label="Packing" value={<Money value={Number(doc.packingHandlingCharges || 0)} />} />
-          )}
-          {isQuoteLike && !!Number(doc.tcs || 0) && <KeyValue label="TCS" value={<Money value={Number(doc.tcs || 0)} />} />}
+      {/* TAX BREAKDOWN */}
+      {(sgst > 0 || cgst > 0 || igst > 0) && (
+        <div style={{ marginTop: 20 }}>
+          <Label>Tax Details</Label>
+          <div style={{ marginTop: 10 }}>
+            {cgst > 0 && <KeyValue label="CGST" value={<Money value={cgst} />} />}
+            {sgst > 0 && <KeyValue label="SGST" value={<Money value={sgst} />} />}
+            {igst > 0 && <KeyValue label="IGST" value={<Money value={igst} />} />}
+          </div>
+        </div>
+      )}
+
+      {/* TOTALS */}
+      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ width: 260 }}>
+          <KeyValue label="Sub Total" value={<Money value={Number(doc.subtotal || 0)} />} />
+          <KeyValue label="Taxes" value={<Money value={cgst + sgst + igst} />} />
           <div style={{ marginTop: 8 }}>
             <Hr />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: '#111827' }}>Total</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>Total</div>
             <div style={{ fontSize: 16, fontWeight: 900, color: '#111827' }}>
               <Money value={Number(doc.grandTotal || 0)} />
             </div>
@@ -147,32 +202,30 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
         </div>
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <Hr />
-        <div style={{ marginTop: 12 }}>
-          <Label>Invoice Amount In Words</Label>
-          <div style={{ marginTop: 8 }}>
-            <SmallText style={{ fontWeight: 900 } as any}>{amountInWordsINR(Number(doc.grandTotal || 0))}</SmallText>
-          </div>
-        </div>
+      {/* AMOUNT IN WORDS */}
+      <div style={{ marginTop: 20 }}>
+        <Label>Invoice Amount In Words</Label>
+        <SmallText style={{ marginTop: 6 } as any}>
+          {amountInWordsINR(Number(doc.grandTotal || 0))}
+        </SmallText>
       </div>
 
+      {/* TERMS */}
       {!!doc.termsConditions && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 18 }}>
           <Hr />
           <div style={{ marginTop: 12 }}>
-            <Label>Terms</Label>
-            <div style={{ marginTop: 8 }}>
-              <SmallText>
-                <div style={{ whiteSpace: 'pre-line' }}>{doc.termsConditions}</div>
-              </SmallText>
-            </div>
+            <Label>Terms and Conditions</Label>
+            <SmallText style={{ marginTop: 6, whiteSpace: 'pre-line' } as any}>
+              {doc.termsConditions}
+            </SmallText>
           </div>
         </div>
       )}
 
-      {(profile.bankName || (profile as any).accountNumber || (profile as any).ifscCode || doc.bankName || doc.bankAccountNumber || doc.bankIfsc) && (
-        <div style={{ marginTop: 16 }}>
+      {/* BANK DETAILS */}
+      {(profile.bankName || (profile as any).accountNumber || doc.bankName || doc.bankAccountNumber) && (
+        <div style={{ marginTop: 20 }}>
           <Hr />
           <div style={{ marginTop: 12 }}>
             <Label>Bank Details</Label>
@@ -182,32 +235,18 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
                 label="Account Holder"
                 value={
                   (doc as any).bankAccountHolderName ||
-                  (doc as any).bankHolderName ||
                   (profile as any).accountHolderName ||
                   profile.businessName
                 }
               />
-              <KeyValueOptional label="Account No" value={doc.bankAccountNumber || (profile as any).accountNumber} />
-              <KeyValueOptional label="IFSC" value={doc.bankIfsc || (profile as any).ifscCode} />
+              <KeyValueOptional label="Account No." value={doc.bankAccountNumber || (profile as any).accountNumber} />
+              <KeyValueOptional label="IFSC Code" value={doc.bankIfsc || (profile as any).ifscCode} />
             </div>
           </div>
         </div>
       )}
 
-      {customFields.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <Hr />
-          <div style={{ marginTop: 12 }}>
-            <Label>Custom Fields</Label>
-            <div style={{ marginTop: 8 }}>
-              {customFields.map((f, idx) => (
-                <KeyValue key={idx} label={f.label} value={f.value} />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* UPI */}
       {(profile.upiId || doc.upiId) && (
         <div style={{ marginTop: 16 }}>
           <Hr />
@@ -232,6 +271,30 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
         </div>
       )}
 
+      {/* CUSTOM FIELDS */}
+      {customFields.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <Hr />
+          <div style={{ marginTop: 12 }}>
+            <Label>Custom Fields</Label>
+            <div style={{ marginTop: 8 }}>
+              {customFields.map((f, idx) => (
+                <KeyValue key={idx} label={f.label} value={f.value} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SIGNATURE */}
+      <div style={{ marginTop: 40, textAlign: 'right' }}>
+        <div style={{ fontWeight: 700, fontSize: 12, color: '#111827' }}>For: {profile.businessName}</div>
+        <div style={{ marginTop: 40, fontSize: 11, color: '#6B7280', borderTop: '1px solid #E5E7EB', paddingTop: 4, display: 'inline-block' }}>
+          Authorized Signatory
+        </div>
+      </div>
+
+      {/* FOOTER */}
       <div style={{ marginTop: 18 }}>
         <Hr />
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>

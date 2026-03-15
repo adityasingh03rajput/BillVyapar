@@ -19,8 +19,12 @@ masterAdminSubscriberDetailsRouter.get('/:id/details', async (req, res, next) =>
       return res.status(404).json({ error: 'Subscriber not found' });
     }
 
-    const [licenseKey, user, profiles, documentCount, customerCount] = await Promise.all([
-      // Use LicenseKey as the source of truth — it's what activate-license writes to
+    // Dynamically import models that may not always be present
+    let Item, Supplier;
+    try { ({ Item } = await import('../../models/Item.js')); } catch { Item = null; }
+    try { ({ Supplier } = await import('../../models/Supplier.js')); } catch { Supplier = null; }
+
+    const [licenseKey, user, profiles, documentCount, customerCount, itemCount, supplierCount] = await Promise.all([
       LicenseKey.findOne({ activatedByUserId: subscriber.ownerUserId })
         .sort({ expiresAt: -1 })
         .lean(),
@@ -28,6 +32,8 @@ masterAdminSubscriberDetailsRouter.get('/:id/details', async (req, res, next) =>
       BusinessProfile.find({ userId: subscriber.ownerUserId }).lean(),
       Document.countDocuments({ userId: subscriber.ownerUserId }),
       Customer.countDocuments({ userId: subscriber.ownerUserId }),
+      Item ? Item.countDocuments({ userId: subscriber.ownerUserId }) : Promise.resolve(0),
+      Supplier ? Supplier.countDocuments({ userId: subscriber.ownerUserId }) : Promise.resolve(0),
     ]);
 
     const now = new Date();
@@ -51,7 +57,7 @@ masterAdminSubscriberDetailsRouter.get('/:id/details', async (req, res, next) =>
         licenseStartAt: licenseKey.activatedAt,
         licenseEndAt: licenseKey.expiresAt,
         daysRemaining,
-        plan: null, // LicenseKey doesn't have a plan reference — show key info only
+        plan: null,
       } : null,
       ownerUser: user ? {
         id: String(user._id),
@@ -70,6 +76,8 @@ masterAdminSubscriberDetailsRouter.get('/:id/details', async (req, res, next) =>
       usage: {
         documentCount,
         customerCount,
+        itemCount,
+        supplierCount,
         profileCount: profiles.length,
       },
     });

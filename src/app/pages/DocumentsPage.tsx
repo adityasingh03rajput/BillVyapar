@@ -134,7 +134,7 @@ export function DocumentsPage() {
 
     setPdfLoading(true);
     try {
-      const docNo = safeFilename(pdfDoc.documentNumber || 'document');
+      const docNo = safeFilename(pdfDoc.invoiceNo || pdfDoc.documentNumber || 'document');
       const customer = safeFilename(pdfDoc.customerName || 'customer');
       const filename = `${docNo}-${customer}.pdf`;
       const url = await exportElementToPdfBlobUrl({
@@ -458,6 +458,7 @@ export function DocumentsPage() {
     if (searchTerm) {
       filtered = filtered.filter(doc => 
         doc.documentNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.customerName?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
@@ -563,7 +564,7 @@ export function DocumentsPage() {
   const buildReminderMessage = (doc: any) => {
     const amount = Number(doc?.grandTotal || 0);
     const due = String(doc?.dueDate || '').trim();
-    const invoiceNo = String(doc?.documentNumber || '').trim();
+    const invoiceNo = String(doc?.invoiceNo || doc?.documentNumber || '').trim();
     const party = String(doc?.customerName || '').trim();
     return `Payment Reminder: ${party ? party + ', ' : ''}${invoiceNo ? invoiceNo + ', ' : ''}Amount ₹${amount.toFixed(2)}${due ? ` due on ${due}` : ''}. Kindly pay at the earliest.`;
   };
@@ -728,7 +729,7 @@ export function DocumentsPage() {
 
     setPdfLoading(true);
     try {
-      const docNo = safeFilename(pdfDoc.documentNumber || 'document');
+      const docNo = safeFilename(pdfDoc.invoiceNo || pdfDoc.documentNumber || 'document');
       const customer = safeFilename(pdfDoc.customerName || 'customer');
       const filename = `${docNo}-${customer}.pdf`;
       await exportElementToPdf({ element: pdfRef.current, filename });
@@ -863,7 +864,7 @@ export function DocumentsPage() {
             <div className="space-y-3">
               <div className="text-sm text-muted-foreground">
                 This will permanently delete
-                <span className="font-medium text-foreground"> {deleteDoc?.documentNumber || 'this document'}</span>.
+                <span className="font-medium text-foreground"> {deleteDoc?.invoiceNo || deleteDoc?.documentNumber || 'this document'}</span>.
               </div>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
@@ -885,7 +886,7 @@ export function DocumentsPage() {
 
             <div className="space-y-4">
               <div className="rounded-md border p-3">
-                <div className="text-sm font-semibold text-foreground">{paymentDoc?.documentNumber || '—'}</div>
+                <div className="text-sm font-semibold text-foreground">{paymentDoc?.invoiceNo || paymentDoc?.documentNumber || '—'}</div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {paymentDoc?.type === 'purchase' ? 'Supplier' : 'Customer'}: {paymentDoc?.customerName || 'N/A'}
                 </div>
@@ -928,7 +929,7 @@ export function DocumentsPage() {
 
             <div className="space-y-4">
               <div className="rounded-md border p-3">
-                <div className="text-sm font-semibold text-foreground">{reminderDoc?.documentNumber}</div>
+                <div className="text-sm font-semibold text-foreground">{reminderDoc?.invoiceNo || reminderDoc?.documentNumber}</div>
                 <div className="text-xs text-muted-foreground">
                   {reminderDoc?.customerName || ''}
                 </div>
@@ -976,7 +977,7 @@ export function DocumentsPage() {
                   variant="outline"
                   onClick={() => {
                     const email = String(reminderDoc?.customerEmail || '').trim();
-                    const subject = encodeURIComponent(`Payment reminder - ${String(reminderDoc?.documentNumber || '').trim()}`);
+    const subject = encodeURIComponent(`Payment reminder - ${String(reminderDoc?.invoiceNo || reminderDoc?.documentNumber || '').trim()}`);
                     const body = encodeURIComponent(String(reminderMessage || '').trim());
                     const mailto = `mailto:${email}?subject=${subject}&body=${body}`;
                     window.location.href = mailto;
@@ -1232,7 +1233,7 @@ export function DocumentsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-lg font-semibold text-foreground">
-                          {doc.documentNumber}
+                          {doc.invoiceNo ? doc.invoiceNo : doc.documentNumber}
                         </h3>
                         <Badge className={getTypeColor(doc.type)}>
                           {getTypeLabel(doc.type)}

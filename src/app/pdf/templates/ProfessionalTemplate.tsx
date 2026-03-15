@@ -178,7 +178,7 @@ export function ProfessionalTemplate({ doc, profile }: PdfTemplateProps) {
                   )}
                 </div>
                 <div style={{ fontSize: 10, opacity: 0.85, marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                  <div style={{ fontWeight: 800 }}>Doc No: {doc.documentNumber}</div>
+                  <div style={{ fontWeight: 800 }}>Doc No: {safeText(doc.invoiceNo) || doc.documentNumber}</div>
                   {!!doc.date && <div>Date: {doc.date}</div>}
                   {!!doc.dueDate && <div>Due: {doc.dueDate}</div>}
                 </div>

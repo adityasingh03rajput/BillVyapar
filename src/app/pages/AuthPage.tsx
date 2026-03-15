@@ -45,7 +45,7 @@ export function AuthPage() {
       setCheckingBackend(true);
       try {
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 2000);
+        const t = setTimeout(() => ctrl.abort(), 20000); // 20s — allows Render cold start
         const res = await fetch(`${API_URL}/health`, { signal: ctrl.signal });
         clearTimeout(t);
         if (cancelled) return;
@@ -59,7 +59,7 @@ export function AuthPage() {
     };
 
     void check();
-    const id = setInterval(check, 5000);
+    const id = setInterval(check, 30000); // re-check every 30s
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -169,8 +169,8 @@ export function AuthPage() {
                 </button>
               ) : null}
             </div>
-            <div className={`font-medium ${backendOnline ? 'text-green-700' : backendOnline === false ? 'text-red-700' : 'text-muted-foreground'}`}>
-              {checkingBackend && backendOnline === null ? 'Checking…' : backendOnline ? 'Backend: Connected' : backendOnline === false ? 'Backend: Disconnected' : 'Backend: Unknown'}
+            <div className={`font-medium ${backendOnline ? 'text-green-700' : backendOnline === false ? 'text-red-700' : 'text-yellow-600'}`}>
+              {checkingBackend && backendOnline === null ? 'Backend: Connecting…' : backendOnline ? 'Backend: Connected' : backendOnline === false && checkingBackend ? 'Backend: Reconnecting…' : backendOnline === false ? 'Backend: Disconnected' : 'Backend: Unknown'}
             </div>
           </div>
 

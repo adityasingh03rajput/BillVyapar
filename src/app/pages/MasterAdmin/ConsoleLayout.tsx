@@ -3,9 +3,10 @@ import { useNavigate, useLocation } from 'react-router';
 import {
   LayoutDashboard, Users, UserCircle, Key, BarChart3, ScrollText,
   ShieldCheck, LogOut, ChevronRight, Bell, X, Command,
-  AlertTriangle, Clock, Zap, Settings, Menu,
+  AlertTriangle, Clock, Zap, Settings, Menu, Palette,
 } from 'lucide-react';
 import { ADMIN_API_URL as API_URL } from '../../config/api';
+import { THEMES, DEFAULT_THEME_ID, getTheme, type AdminTheme } from './themes';
 
 const NAV = [
   { group: 'Overview', items: [
@@ -44,15 +45,31 @@ export function ConsoleLayout({ children }: Props) {
   const [cmd,  setCmd]  = useState(false);
   const [q,    setQ]    = useState('');
   const [qi,   setQi]   = useState(0);
-  const [notif, setNotif] = useState(false);
+  const [notif,  setNotif]  = useState(false);
+  const [themePanel, setThemePanel] = useState(false);
   const [alerts, setAlerts] = useState({ e7: 0, e30: 0 });
+  const [themeId, setThemeId] = useState<string>(
+    () => localStorage.getItem('adminTheme') ?? DEFAULT_THEME_ID
+  );
   const cmdRef = useRef<HTMLInputElement>(null);
   const admin  = JSON.parse(localStorage.getItem('masterAdmin') || '{}');
+
+  const t: AdminTheme = getTheme(themeId);
+  const isDark = themeId === 'midnight-dark';
+
+  const applyTheme = (id: string) => {
+    setThemeId(id);
+    localStorage.setItem('adminTheme', id);
+    setThemePanel(false);
+  };
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setCmd(v => !v); }
-      if (e.key === 'Escape') { setCmd(false); setNotif(false); setSideOpen(prev => { if (window.innerWidth < 768) return false; return prev; }); }
+      if (e.key === 'Escape') {
+        setCmd(false); setNotif(false); setThemePanel(false);
+        setSideOpen(prev => { if (window.innerWidth < 768) return false; return prev; });
+      }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -61,15 +78,14 @@ export function ConsoleLayout({ children }: Props) {
   useEffect(() => { if (cmd) setTimeout(() => cmdRef.current?.focus(), 50); }, [cmd]);
 
   useEffect(() => {
-    const t = localStorage.getItem('masterAdminToken');
-    if (!t) return;
-    fetch(`${API_URL}/master-admin/dashboard/stats`, { headers: { Authorization: `Bearer ${t}` } })
+    const tk = localStorage.getItem('masterAdminToken');
+    if (!tk) return;
+    fetch(`${API_URL}/master-admin/dashboard/stats`, { headers: { Authorization: `Bearer ${tk}` } })
       .then(r => r.json())
       .then(d => { if (!d.error) setAlerts({ e7: d.expiringIn7Days || 0, e30: d.expiringIn30Days || 0 }); })
       .catch(() => {});
   }, [loc.pathname]);
 
-  // close sidebar on route change on mobile
   useEffect(() => {
     if (window.innerWidth < 768) setSideOpen(false);
   }, [loc.pathname]);
@@ -87,168 +103,210 @@ export function ConsoleLayout({ children }: Props) {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden"
-      style={{ background: 'linear-gradient(135deg,#f0f4ff 0%,#faf5ff 50%,#f0fdf4 100%)' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: t.pageBg }}>
 
-      {/* ── Backdrop (mobile only) ── */}
+      {/* Backdrop (mobile) */}
       {sideOpen && (
-        <div
-          className="fixed inset-0 z-[30] md:hidden"
+        <div className="fixed inset-0 z-[30] md:hidden"
           style={{ background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(2px)' }}
-          onClick={() => setSideOpen(false)}
-        />
+          onClick={() => setSideOpen(false)} />
       )}
 
-      {/* ══════════ SIDEBAR ══════════ */}
-      <aside
-        className="flex-shrink-0 h-full z-[20] relative"
+      {/* ══ SIDEBAR ══ */}
+      <aside className="flex-shrink-0 h-full z-[20] relative"
         style={{
-          width: sideOpen ? 240 : 0,
-          minWidth: 0,
-          overflow: 'hidden',
+          width: sideOpen ? 240 : 0, minWidth: 0, overflow: 'hidden',
           transition: 'width 280ms cubic-bezier(.4,0,.2,1)',
-          background: 'rgba(255,255,255,0.82)',
+          background: t.sidebarBg,
           backdropFilter: 'blur(24px)',
-          borderRight: sideOpen ? '1.5px solid rgba(255,255,255,0.9)' : 'none',
-          boxShadow: sideOpen ? '6px 0 32px rgba(99,102,241,0.1)' : 'none',
-        }}
-      >
-        {/* Inner wrapper — fixed 240px so content doesn't squish during animation */}
+          borderRight: sideOpen ? `1.5px solid ${t.sidebarBorder}` : 'none',
+          boxShadow: sideOpen ? t.sidebarShadow : 'none',
+        }}>
         <div className="flex flex-col h-full" style={{ width: 240 }}>
 
-        {/* Brand row */}
-        <div className="flex items-center gap-3 h-16 px-4 flex-shrink-0"
-          style={{ borderBottom: '1.5px solid rgba(99,102,241,0.08)' }}>
-          <div className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 14px rgba(99,102,241,0.4)' }}>
-            <Zap className="h-4 w-4 text-white" />
+          {/* Brand */}
+          <div className="flex items-center gap-3 h-16 px-4 flex-shrink-0"
+            style={{ borderBottom: `1.5px solid ${isDark ? 'rgba(255,255,255,0.06)' : `${t.accent}14`}` }}>
+            <div className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0"
+              style={{ background: t.brandGradient, boxShadow: t.brandShadow }}>
+              <Zap className="h-4 w-4 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold leading-none tracking-tight" style={{ color: t.textPrimary }}>Bill Vyapar</p>
+              <p className="text-[10px] mt-0.5 font-semibold" style={{ color: t.accent }}>Admin Console</p>
+            </div>
+            <button onClick={() => setSideOpen(false)}
+              className="p-1.5 rounded-xl transition-all flex-shrink-0"
+              style={{ color: t.navGroupColor }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = t.accentLight; (e.currentTarget as HTMLElement).style.color = t.accent; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = t.navGroupColor; }}>
+              <X style={{ width: 15, height: 15 }} />
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold leading-none tracking-tight" style={{ color: '#1e1b4b' }}>Bill Vyapar</p>
-            <p className="text-[10px] mt-0.5 font-semibold" style={{ color: '#6366f1' }}>Admin Console</p>
-          </div>
-          {/* close button inside sidebar */}
-          <button onClick={() => setSideOpen(false)}
-            className="p-1.5 rounded-xl transition-all flex-shrink-0"
-            style={{ color: '#a5b4fc' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#eef2ff'; (e.currentTarget as HTMLElement).style.color = '#6366f1'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#a5b4fc'; }}>
-            <X style={{ width: 15, height: 15 }} />
-          </button>
-        </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
-          {NAV.map(g => (
-            <div key={g.group}>
-              <p className="px-2 mb-2 text-[9px] font-black tracking-widest uppercase" style={{ color: '#a5b4fc' }}>{g.group}</p>
-              <div className="space-y-0.5">
-                {g.items.map(item => {
-                  const active = loc.pathname === item.path ||
-                    (item.path !== '/dashboard' && loc.pathname.startsWith(item.path));
-                  return (
-                    <button key={item.path}
-                      onClick={() => navigate(item.path)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all duration-150"
-                      style={{
-                        background: active ? item.bg : 'transparent',
-                        color: active ? item.c : '#64748b',
-                        border: active ? `1.5px solid ${item.c}25` : '1.5px solid transparent',
-                        boxShadow: active ? `0 4px 12px ${item.c}18` : 'none',
-                      }}
-                      onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.06)'; (e.currentTarget as HTMLElement).style.color = '#4f46e5'; } }}
-                      onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#64748b'; } }}
-                    >
-                      <div className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ background: active ? `${item.c}18` : 'transparent' }}>
-                        <item.icon style={{ color: active ? item.c : 'currentColor', width: 15, height: 15 }} />
-                      </div>
-                      <span className="flex-1 text-left">{item.label}</span>
-                      {active && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: item.c }} />}
-                    </button>
-                  );
-                })}
+          {/* Nav */}
+          <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+            {NAV.map(g => (
+              <div key={g.group}>
+                <p className="px-2 mb-2 text-[9px] font-black tracking-widest uppercase" style={{ color: t.navGroupColor }}>{g.group}</p>
+                <div className="space-y-0.5">
+                  {g.items.map(item => {
+                    const active = loc.pathname === item.path ||
+                      (item.path !== '/dashboard' && loc.pathname.startsWith(item.path));
+                    // In dark mode use accent-tinted active colors; otherwise use item colors
+                    const activeBg   = isDark ? t.accentLight : item.bg;
+                    const activeColor = isDark ? t.accent : item.c;
+                    return (
+                      <button key={item.path}
+                        onClick={() => navigate(item.path)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all duration-150"
+                        style={{
+                          background: active ? activeBg : 'transparent',
+                          color: active ? activeColor : t.textSecondary,
+                          border: active ? `1.5px solid ${activeColor}25` : '1.5px solid transparent',
+                          boxShadow: active ? `0 4px 12px ${activeColor}18` : 'none',
+                        }}
+                        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = t.navHoverBg; (e.currentTarget as HTMLElement).style.color = t.navHoverColor; } }}
+                        onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = t.textSecondary; } }}
+                      >
+                        <div className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style={{ background: active ? `${activeColor}18` : 'transparent' }}>
+                          <item.icon style={{ color: active ? activeColor : 'currentColor', width: 15, height: 15 }} />
+                        </div>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {active && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: activeColor }} />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
-        </nav>
+            ))}
+          </nav>
 
-        {/* Footer */}
-        <div className="flex-shrink-0 px-3 py-3" style={{ borderTop: '1.5px solid rgba(99,102,241,0.08)' }}>
-          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl mb-2"
-            style={{ background: 'linear-gradient(135deg,#eef2ff,#ede9fe)', border: '1.5px solid rgba(99,102,241,0.12)' }}>
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff' }}>
-              {(admin.name || admin.email || 'A')[0].toUpperCase()}
+          {/* Footer */}
+          <div className="flex-shrink-0 px-3 py-3"
+            style={{ borderTop: `1.5px solid ${isDark ? 'rgba(255,255,255,0.06)' : `${t.accent}14`}` }}>
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl mb-2"
+              style={{ background: t.footerCardBg, border: `1.5px solid ${t.footerCardBorder}` }}>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0"
+                style={{ background: t.brandGradient, color: '#fff' }}>
+                {(admin.name || admin.email || 'A')[0].toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold truncate" style={{ color: t.textPrimary }}>{admin.name || admin.email?.split('@')[0] || 'Admin'}</p>
+                <p className="text-[10px] capitalize font-medium truncate" style={{ color: t.accent }}>{admin.role?.replace('_', ' ') || 'admin'}</p>
+              </div>
+              <Settings style={{ width: 13, height: 13, color: t.navGroupColor, flexShrink: 0 }} />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold truncate" style={{ color: '#1e1b4b' }}>{admin.name || admin.email?.split('@')[0] || 'Admin'}</p>
-              <p className="text-[10px] capitalize font-medium truncate" style={{ color: '#6366f1' }}>{admin.role?.replace('_', ' ') || 'admin'}</p>
-            </div>
-            <Settings style={{ width: 13, height: 13, color: '#a5b4fc', flexShrink: 0 }} />
+            <button onClick={logout}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+              style={{ color: t.textMuted }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f43f5e'; (e.currentTarget as HTMLElement).style.background = isDark ? 'rgba(244,63,94,0.12)' : '#fff1f2'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = t.textMuted; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
+              <LogOut style={{ width: 13, height: 13 }} />Sign out
+            </button>
           </div>
-          <button onClick={logout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
-            style={{ color: '#94a3b8' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f43f5e'; (e.currentTarget as HTMLElement).style.background = '#fff1f2'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#94a3b8'; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
-            <LogOut style={{ width: 13, height: 13 }} />Sign out
-          </button>
         </div>
-        </div>{/* end inner 240px wrapper */}
       </aside>
 
-      {/* ══════════ MAIN AREA ══════════ */}
+      {/* ══ MAIN AREA ══ */}
       <div className="flex flex-col flex-1 min-w-0 h-screen overflow-hidden">
 
         {/* Topbar */}
         <header className="h-16 flex-shrink-0 flex items-center justify-between px-4 md:px-6 relative z-[10]"
           style={{
-            background: 'rgba(255,255,255,0.78)',
+            background: t.topbarBg,
             backdropFilter: 'blur(20px)',
-            borderBottom: '1.5px solid rgba(255,255,255,0.9)',
-            boxShadow: '0 2px 16px rgba(99,102,241,0.06)',
+            borderBottom: `1.5px solid ${t.topbarBorder}`,
+            boxShadow: t.topbarShadow,
           }}>
 
-          {/* Left: hamburger + breadcrumb */}
+          {/* Left */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSideOpen(v => !v)}
+            <button onClick={() => setSideOpen(v => !v)}
               className="p-2 rounded-xl transition-all"
-              style={{ color: '#64748b' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#eef2ff'; (e.currentTarget as HTMLElement).style.color = '#6366f1'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#64748b'; }}
-              aria-label="Toggle sidebar"
-            >
+              style={{ color: t.textSecondary }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = t.accentLight; (e.currentTarget as HTMLElement).style.color = t.accent; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = t.textSecondary; }}
+              aria-label="Toggle sidebar">
               <Menu style={{ width: 18, height: 18 }} />
             </button>
-
             <div className="flex items-center gap-1.5 text-sm">
-              <span className="hidden sm:inline" style={{ color: '#94a3b8' }}>Console</span>
-              <ChevronRight className="hidden sm:block" style={{ width: 12, height: 12, color: '#cbd5e1' }} />
-              <span className="font-bold" style={{ color: '#1e1b4b' }}>{current?.label || 'Dashboard'}</span>
+              <span className="hidden sm:inline" style={{ color: t.textMuted }}>Console</span>
+              <ChevronRight className="hidden sm:block" style={{ width: 12, height: 12, color: t.textMuted }} />
+              <span className="font-bold" style={{ color: t.textPrimary }}>{current?.label || 'Dashboard'}</span>
             </div>
           </div>
 
-          {/* Right: search + notif + live */}
+          {/* Right */}
           <div className="flex items-center gap-2">
+            {/* Search */}
             <button onClick={() => setCmd(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-2xl text-xs font-medium transition-all"
-              style={{ background: '#f1f5f9', border: '1.5px solid #e2e8f0', color: '#64748b' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#eef2ff'; (e.currentTarget as HTMLElement).style.borderColor = '#c7d2fe'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0'; }}>
+              style={{ background: t.surfaceBg, border: `1.5px solid ${t.surfaceBorder}`, color: t.textSecondary }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = t.accentLight; (e.currentTarget as HTMLElement).style.borderColor = t.accentBorder; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = t.surfaceBg; (e.currentTarget as HTMLElement).style.borderColor = t.surfaceBorder; }}>
               <Command style={{ width: 13, height: 13 }} />
               <span className="hidden sm:inline">Search</span>
-              <kbd className="hidden sm:inline px-1.5 py-0.5 rounded-md text-[10px] font-mono" style={{ background: '#e2e8f0', color: '#94a3b8' }}>⌘K</kbd>
+              <kbd className="hidden sm:inline px-1.5 py-0.5 rounded-md text-[10px] font-mono"
+                style={{ background: t.cmdKbdBg, color: t.cmdKbdColor }}>⌘K</kbd>
             </button>
+
+            {/* Theme picker */}
+            <div className="relative">
+              <button onClick={() => { setThemePanel(v => !v); setNotif(false); }}
+                className="p-2.5 rounded-2xl transition-all"
+                style={{ background: t.surfaceBg, border: `1.5px solid ${t.surfaceBorder}`, color: t.textSecondary }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = t.accentLight; (e.currentTarget as HTMLElement).style.borderColor = t.accentBorder; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = t.surfaceBg; (e.currentTarget as HTMLElement).style.borderColor = t.surfaceBorder; }}
+                title="Change theme">
+                <Palette style={{ width: 16, height: 16 }} />
+              </button>
+
+              {themePanel && (
+                <div className="absolute right-0 top-14 rounded-3xl z-[40] overflow-hidden"
+                  style={{ width: 260, background: t.notifBg, backdropFilter: 'blur(20px)', border: `1.5px solid ${t.notifBorder}`, boxShadow: `0 20px 60px ${t.accentShadow}` }}>
+                  <div className="px-5 py-4 flex items-center justify-between"
+                    style={{ borderBottom: `1.5px solid ${t.notifDivider}` }}>
+                    <p className="text-sm font-bold" style={{ color: t.textPrimary }}>Theme</p>
+                    <button onClick={() => setThemePanel(false)} className="p-1 rounded-lg" style={{ color: t.textMuted }}>
+                      <X style={{ width: 14, height: 14 }} />
+                    </button>
+                  </div>
+                  <div className="p-3 grid grid-cols-2 gap-2">
+                    {THEMES.map(th => (
+                      <button key={th.id} onClick={() => applyTheme(th.id)}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-2xl text-left transition-all"
+                        style={{
+                          background: themeId === th.id ? t.accentLight : t.surfaceBg,
+                          border: `1.5px solid ${themeId === th.id ? t.accentBorder : t.surfaceBorder}`,
+                          boxShadow: themeId === th.id ? `0 2px 8px ${t.accentShadow}` : 'none',
+                        }}>
+                        {/* Color swatch */}
+                        <span className="w-5 h-5 rounded-lg flex-shrink-0 flex items-center justify-center text-xs"
+                          style={{ background: th.brandGradient }}>
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold truncate" style={{ color: t.textPrimary }}>{th.name}</p>
+                          <p className="text-[9px]">{th.emoji}</p>
+                        </div>
+                        {themeId === th.id && (
+                          <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.accent }} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Notifications */}
             <div className="relative">
-              <button onClick={() => setNotif(v => !v)}
+              <button onClick={() => { setNotif(v => !v); setThemePanel(false); }}
                 className="relative p-2.5 rounded-2xl transition-all"
-                style={{ background: '#f1f5f9', border: '1.5px solid #e2e8f0', color: '#64748b' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#eef2ff'; (e.currentTarget as HTMLElement).style.borderColor = '#c7d2fe'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0'; }}>
+                style={{ background: t.surfaceBg, border: `1.5px solid ${t.surfaceBorder}`, color: t.textSecondary }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = t.accentLight; (e.currentTarget as HTMLElement).style.borderColor = t.accentBorder; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = t.surfaceBg; (e.currentTarget as HTMLElement).style.borderColor = t.surfaceBorder; }}>
                 <Bell style={{ width: 16, height: 16 }} />
                 {totalAlerts > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
@@ -260,16 +318,16 @@ export function ConsoleLayout({ children }: Props) {
 
               {notif && (
                 <div className="absolute right-0 top-14 rounded-3xl z-[40] overflow-hidden"
-                  style={{ width: 300, background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(20px)', border: '1.5px solid rgba(255,255,255,0.9)', boxShadow: '0 20px 60px rgba(99,102,241,0.15)' }}>
-                  <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1.5px solid #f1f5f9' }}>
-                    <p className="text-sm font-bold" style={{ color: '#1e1b4b' }}>Notifications</p>
+                  style={{ width: 300, background: t.notifBg, backdropFilter: 'blur(20px)', border: `1.5px solid ${t.notifBorder}`, boxShadow: `0 20px 60px ${t.accentShadow}` }}>
+                  <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: `1.5px solid ${t.notifDivider}` }}>
+                    <p className="text-sm font-bold" style={{ color: t.textPrimary }}>Notifications</p>
                     {totalAlerts > 0 && <span className="text-[10px] px-2.5 py-1 rounded-full font-bold" style={{ background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>{totalAlerts}</span>}
                   </div>
                   <div className="p-3 space-y-2">
                     {totalAlerts === 0 ? (
                       <div className="py-8 text-center">
-                        <Bell style={{ width: 28, height: 28, margin: '0 auto 8px', color: '#e2e8f0' }} />
-                        <p className="text-xs font-medium" style={{ color: '#94a3b8' }}>No alerts right now</p>
+                        <Bell style={{ width: 28, height: 28, margin: '0 auto 8px', color: t.textMuted }} />
+                        <p className="text-xs font-medium" style={{ color: t.textMuted }}>No alerts right now</p>
                       </div>
                     ) : (
                       <>
@@ -298,31 +356,30 @@ export function ConsoleLayout({ children }: Props) {
               )}
             </div>
 
+            {/* Live badge */}
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl"
-              style={{ background: '#d1fae5', border: '1.5px solid #a7f3d0' }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-black tracking-widest hidden sm:inline" style={{ color: '#059669' }}>LIVE</span>
+              style={{ background: t.liveBg, border: `1.5px solid ${t.liveBorder}` }}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: t.liveDot }} />
+              <span className="text-[10px] font-black tracking-widest hidden sm:inline" style={{ color: t.liveColor }}>LIVE</span>
             </div>
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6 w-full relative z-[0]">
-          <div className="max-w-7xl mx-auto w-full">
-            {children}
-          </div>
+          {children}
         </main>
       </div>
 
-      {/* ══════════ COMMAND PALETTE ══════════ */}
+      {/* ══ COMMAND PALETTE ══ */}
       {cmd && (
         <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] px-4"
           onClick={() => setCmd(false)}>
           <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(15,23,42,0.4)' }} />
           <div className="relative w-full max-w-md rounded-3xl overflow-hidden"
-            style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(20px)', border: '1.5px solid rgba(255,255,255,0.9)', boxShadow: '0 32px 80px rgba(99,102,241,0.2)' }}
+            style={{ background: t.cmdBg, backdropFilter: 'blur(20px)', border: `1.5px solid ${t.cmdBorder}`, boxShadow: `0 32px 80px ${t.accentShadow}` }}
             onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: '1.5px solid #f1f5f9' }}>
-              <Command style={{ width: 16, height: 16, color: '#a5b4fc', flexShrink: 0 }} />
+            <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: `1.5px solid ${t.notifDivider}` }}>
+              <Command style={{ width: 16, height: 16, color: t.navGroupColor, flexShrink: 0 }} />
               <input ref={cmdRef} value={q} onChange={e => { setQ(e.target.value); setQi(0); }}
                 onKeyDown={e => {
                   if (e.key === 'ArrowDown') setQi(i => Math.min(i + 1, filtered.length - 1));
@@ -331,31 +388,33 @@ export function ConsoleLayout({ children }: Props) {
                 }}
                 placeholder="Search pages and actions..."
                 className="flex-1 bg-transparent text-sm outline-none font-medium"
-                style={{ color: '#1e1b4b' }} />
-              <button onClick={() => setCmd(false)} className="p-1 rounded-lg" style={{ color: '#94a3b8' }}>
+                style={{ color: t.textPrimary }} />
+              <button onClick={() => setCmd(false)} className="p-1 rounded-lg" style={{ color: t.textMuted }}>
                 <X style={{ width: 15, height: 15 }} />
               </button>
             </div>
             <div className="py-2 max-h-72 overflow-y-auto">
               {filtered.length === 0
-                ? <p className="text-center py-8 text-sm font-medium" style={{ color: '#94a3b8' }}>No results</p>
+                ? <p className="text-center py-8 text-sm font-medium" style={{ color: t.textMuted }}>No results</p>
                 : filtered.map((item, i) => (
                   <button key={item.action}
                     onClick={() => { navigate(item.action); setCmd(false); setQ(''); }}
                     className="w-full flex items-center gap-3 px-5 py-3 text-left transition-all"
-                    style={{ background: i === qi ? '#eef2ff' : 'transparent', color: i === qi ? '#4f46e5' : '#64748b' }}>
+                    style={{ background: i === qi ? t.cmdItemHoverBg : 'transparent', color: i === qi ? t.cmdItemHoverColor : t.textSecondary }}>
                     <div className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: i === qi ? '#c7d2fe' : '#f1f5f9' }}>
-                      <item.icon style={{ width: 14, height: 14, color: i === qi ? '#4f46e5' : '#94a3b8' }} />
+                      style={{ background: i === qi ? t.accentBorder : t.surfaceBg }}>
+                      <item.icon style={{ width: 14, height: 14, color: i === qi ? t.cmdItemHoverColor : t.textMuted }} />
                     </div>
                     <span className="text-sm font-semibold">{item.label}</span>
                   </button>
                 ))}
             </div>
-            <div className="px-5 py-3 flex items-center gap-4" style={{ borderTop: '1.5px solid #f1f5f9', background: '#fafafa' }}>
+            <div className="px-5 py-3 flex items-center gap-4"
+              style={{ borderTop: `1.5px solid ${t.notifDivider}`, background: t.cmdFooterBg }}>
               {[['↑↓','nav'],['↵','open'],['Esc','close']].map(([k, v]) => (
-                <span key={k} className="flex items-center gap-1.5 text-[10px] font-medium" style={{ color: '#94a3b8' }}>
-                  <kbd className="px-1.5 py-0.5 rounded-lg font-mono text-[10px]" style={{ background: '#e2e8f0', color: '#64748b' }}>{k}</kbd>{v}
+                <span key={k} className="flex items-center gap-1.5 text-[10px] font-medium" style={{ color: t.textMuted }}>
+                  <kbd className="px-1.5 py-0.5 rounded-lg font-mono text-[10px]"
+                    style={{ background: t.cmdKbdBg, color: t.cmdKbdColor }}>{k}</kbd>{v}
                 </span>
               ))}
             </div>

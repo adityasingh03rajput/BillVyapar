@@ -71,14 +71,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [deviceId]);
 
   const signIn = async (email: string, password: string) => {
-    const response = await fetch(`${apiUrl}/auth/signin`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Device-ID': deviceId,
-      },
-      body: JSON.stringify({ email, password }),
-    });
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 30000); // 30s for cold-start
+    let response: Response;
+    try {
+      response = await fetch(`${apiUrl}/auth/signin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Device-ID': deviceId,
+        },
+        body: JSON.stringify({ email, password }),
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(t);
+    }
 
     const data = await response.json();
     

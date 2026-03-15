@@ -146,9 +146,10 @@ suppliersRouter.post('/gstin/lookup', enforceFeature('allowGstinLookup'), async 
 
     res.json({
       gstin: String(gstData.gstin || cleaned),
-      name: String(gstData.tradeNam || gstData.legalName || '').trim(),
+      name: String(gstData.tradeName || gstData.legalName || '').trim(),
+      ownerName: String(gstData.legalName || gstData.tradeName || '').trim(),
       legalName: String(gstData.legalName || '').trim(),
-      tradeName: String(gstData.tradeNam || '').trim(),
+      tradeName: String(gstData.tradeName || '').trim(),
       pan: panFromGstin,
       billingAddress,
       billingCity,
@@ -198,7 +199,8 @@ suppliersRouter.post('/gstin', enforceFeature('allowGstinLookup'), async (req, r
     const supplier = await Supplier.create({
       userId: req.userId,
       profileId: req.profileId,
-      name: gstData.tradeNam || gstData.legalName,
+      name: gstData.tradeName || gstData.legalName,
+      ownerName: gstData.legalName || gstData.tradeName,
       email: '',
       phone: '',
       gstin: gstData.gstin,

@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import { Subscriber } from '../../models/Subscriber.js';
 import { SubscriberLicense } from '../../models/SubscriberLicense.js';
 import { User } from '../../models/User.js';
 import { AuditLog } from '../../models/AuditLog.js';
+import { Session } from '../../models/Session.js';
 import { requireMasterAdmin } from '../../middleware/masterAdmin.js';
 
 export const masterAdminSubscribersRouter = Router();
@@ -258,6 +260,79 @@ masterAdminSubscribersRouter.post('/:id/extend-trial', async (req, res, next) =>
     await logAudit(req.masterAdminId, 'subscriber_trial_extended', subscriber._id, before, subscriber.toObject(), { days });
 
     res.json({ ok: true, trialExtensionDays: subscriber.trialExtensionDays });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Reset subscriber owner password
+masterAdminSubscribersRouter.post('/:id/reset-password', async (req, res, next) => {
+  try {
+    const subscriber = await Subscriber.findById(req.params.id).lean();
+    if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
+
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const user = await User.findById(subscriber.ownerUserId);
+    if (!user) return res.status(404).json({ error: 'Owner user not found' });
+
+    const bcrypt = await import('bcryptjs');
+    user.password = await bcrypt.default.hash(newPassword, 10);
+    await user.save();
+
+    await logAudit(req.masterAdminId, 'subscriber_password_reset', subscriber._id, null, null, { userId: String(user._id) });
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// List active sessions for subscriber's owner user
+masterAdminSubscribersRouter.get('/:id/sessions', async (req, res, next) => {
+  try {
+    const subscriber = await Subscriber.findById(req.params.id).lean();
+    if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
+
+    const sessions = await Session.find({ userId: subscriber.ownerUserId })
+      .sort({ lastActive: -1 })
+      .lean();
+
+    res.json({
+      sessions: sessions.map(s => ({
+        id: String(s._id),
+        deviceId: s.deviceId,
+        lastActive: s.lastActive,
+        createdAt: s.createdAt,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete (logout) a specific session
+masterAdminSubscribersRouter.delete('/:id/sessions/:sessionId', async (req, res, next) => {
+  try {
+    const subscriber = await Subscriber.findById(req.params.id).lean();
+    if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
+
+    const session = await Session.findOneAndDelete({
+      _id: req.params.sessionId,
+      userId: subscriber.ownerUserId,
+    });
+
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    await logAudit(req.masterAdminId, 'subscriber_session_deleted', subscriber._id, null, null, {
+      sessionId: req.params.sessionId,
+      deviceId: session.deviceId,
+    });
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

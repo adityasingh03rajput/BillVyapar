@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ADMIN_API_URL as API_URL } from '../../config/api';
 import { toast } from 'sonner';
-import { Search, Users, CheckCircle, XCircle, Clock, Ban, RefreshCw, Settings, Filter } from 'lucide-react';
+import { Search, Users, CheckCircle, XCircle, Clock, Ban, RefreshCw, Settings, Filter, KeyRound, X } from 'lucide-react';
 
 const STATUS_FILTERS = ['all', 'active', 'expired', 'suspended'] as const;
 type StatusFilter = typeof STATUS_FILTERS[number];
@@ -26,6 +26,9 @@ export function MasterAdminSubscribersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [resetTarget, setResetTarget] = useState<any>(null);
+  const [resetPw, setResetPw] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => { load(); }, [search, filter]);
 
@@ -70,6 +73,22 @@ export function MasterAdminSubscribersPage() {
     } catch { toast.error('Failed'); }
   };
 
+  const resetSubscriberPassword = async () => {
+    if (!resetPw || resetPw.length < 6) { toast.error('Password must be at least 6 characters'); return; }
+    setResetting(true);
+    try {
+      const res = await fetch(`${API_URL}/master-admin/subscribers/${resetTarget._id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+        body: JSON.stringify({ newPassword: resetPw }),
+      });
+      const data = await res.json();
+      if (data.error) toast.error(data.error);
+      else { toast.success('Password reset'); setResetTarget(null); setResetPw(''); }
+    } catch { toast.error('Failed to reset password'); }
+    finally { setResetting(false); }
+  };
+
   const counts = {
     all: licensees.length,
     active: licensees.filter(l => l.status === 'active').length,
@@ -85,7 +104,7 @@ export function MasterAdminSubscribersPage() {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto">
+    <div className="space-y-4 w-full">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -250,6 +269,14 @@ export function MasterAdminSubscribersPage() {
                           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#eef2ff'; }}>
                           <Settings className="h-3 w-3" />Manage
                         </button>
+                        <button onClick={() => { setResetTarget(l); setResetPw(''); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                          style={{ background: '#f1f5f9', color: '#64748b', border: '1.5px solid #e2e8f0' }}
+                          title="Reset password"
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#eef2ff'; (e.currentTarget as HTMLElement).style.color = '#6366f1'; (e.currentTarget as HTMLElement).style.borderColor = '#c7d2fe'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; (e.currentTarget as HTMLElement).style.color = '#64748b'; (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0'; }}>
+                          <KeyRound className="h-3 w-3" />
+                        </button>
                         {l.status === 'active' && (
                           <button onClick={() => suspend(l._id)}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
@@ -275,6 +302,56 @@ export function MasterAdminSubscribersPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetTarget && (
+        <div className="fixed inset-0 flex items-center justify-center z-[50] p-4"
+          style={{ background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)' }}>
+          <div className="w-full max-w-sm rounded-3xl overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.97)', border: '1.5px solid rgba(255,255,255,0.9)', boxShadow: '0 32px 80px rgba(99,102,241,0.15)' }}>
+            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1.5px solid #f1f5f9' }}>
+              <h2 className="text-base font-black" style={{ color: '#1e1b4b' }}>Reset Password</h2>
+              <button onClick={() => setResetTarget(null)} className="p-1.5 rounded-xl"
+                style={{ background: '#f1f5f9', color: '#94a3b8' }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm font-medium mb-4" style={{ color: '#64748b' }}>
+                Resetting password for <span className="font-black" style={{ color: '#1e1b4b' }}>{resetTarget.email}</span>
+              </p>
+              <input
+                type="password"
+                placeholder="New password (min 6 chars)"
+                style={{
+                  background: '#f8fafc',
+                  border: '1.5px solid #e2e8f0',
+                  color: '#1e1b4b',
+                  borderRadius: 16,
+                  padding: '10px 14px',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  width: '100%',
+                  outline: 'none',
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.04)',
+                }}
+                value={resetPw}
+                onChange={e => setResetPw(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3 px-6 py-5" style={{ borderTop: '1.5px solid #f1f5f9', background: '#fafafa' }}>
+              <button onClick={() => setResetTarget(null)}
+                className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold"
+                style={{ background: '#f1f5f9', border: '1.5px solid #e2e8f0', color: '#64748b' }}>Cancel</button>
+              <button onClick={resetSubscriberPassword} disabled={resetting}
+                className="flex-1 px-4 py-3 rounded-2xl text-sm font-black text-white disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#6366f1,#818cf8)', boxShadow: '0 6px 20px rgba(99,102,241,0.3)' }}>
+                {resetting ? 'Resetting...' : 'Reset'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

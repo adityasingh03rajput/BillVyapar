@@ -6,6 +6,7 @@ const customerSchema = new mongoose.Schema(
     profileId: { type: mongoose.Schema.Types.ObjectId, ref: 'BusinessProfile', required: false, index: true, default: null },
 
     name: { type: String, required: true },
+    ownerName: { type: String, default: null },
     email: { type: String, default: null },
     phone: { type: String, default: null },
     logoDataUrl: { type: String, default: null },

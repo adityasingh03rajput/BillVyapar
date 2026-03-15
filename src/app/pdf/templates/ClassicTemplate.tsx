@@ -157,7 +157,7 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
               <Box>
                 <Label>Invoice Details</Label>
                 <div style={{ marginTop: 10 }}>
-                  <KeyValue label="Document" value={doc.documentNumber} />
+                  <KeyValue label="Document" value={safeText(doc.invoiceNo) || safeText(doc.documentNumber)} />
                   <KeyValueOptional label="Date" value={doc.date} />
                   <KeyValueOptional label="Due" value={doc.dueDate} />
                   <KeyValueOptional label="Place of Supply" value={doc.placeOfSupply} />

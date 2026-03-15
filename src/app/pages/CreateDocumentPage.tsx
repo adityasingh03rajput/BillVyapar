@@ -109,6 +109,130 @@ export function CreateDocumentPage() {
   
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
+  const [showInvoiceMetadata, setShowInvoiceMetadata] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('createDocument.showInvoiceMetadata');
+      if (raw === null) return true;
+      return raw === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  const [showShippingLogistics, setShowShippingLogistics] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('createDocument.showShippingLogistics');
+      if (raw === null) return true;
+      return raw === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  const [showBankDetails, setShowBankDetails] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('createDocument.showBankDetails');
+      if (raw === null) return true;
+      return raw === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  const [showTermsNotes, setShowTermsNotes] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('createDocument.showTermsNotes');
+      if (raw === null) return true;
+      return raw === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  const [showPaymentBox, setShowPaymentBox] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('createDocument.showPaymentBox');
+      if (raw === null) return true;
+      return raw === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  const [showCharges, setShowCharges] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('createDocument.showCharges');
+      if (raw === null) return true;
+      return raw === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('createDocument.showInvoiceMetadata', showInvoiceMetadata ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [showInvoiceMetadata]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('createDocument.showShippingLogistics', showShippingLogistics ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [showShippingLogistics]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('createDocument.showBankDetails', showBankDetails ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [showBankDetails]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('createDocument.showTermsNotes', showTermsNotes ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [showTermsNotes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('createDocument.showPaymentBox', showPaymentBox ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [showPaymentBox]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('createDocument.showCharges', showCharges ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [showCharges]);
+
+  useEffect(() => {
+    try {
+      const root = document.documentElement;
+      const prev = root.style.getPropertyValue('--content-max');
+      root.style.setProperty('--content-max', '100%');
+      return () => {
+        if (prev) root.style.setProperty('--content-max', prev);
+        else root.style.removeProperty('--content-max');
+      };
+    } catch {
+      return;
+    }
+  }, []);
   
   // Document fields
   const [type, setType] = useState('invoice');
@@ -235,8 +359,11 @@ export function CreateDocumentPage() {
   const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
   const [createCustomerSaving, setCreateCustomerSaving] = useState(false);
   const [createCustomerGstinLookupLoading, setCreateCustomerGstinLookupLoading] = useState(false);
+  const [createPartySameAsBilling, setCreatePartySameAsBilling] = useState(true);
+  const [createPartyShippingEdited, setCreatePartyShippingEdited] = useState(false);
   const [createCustomerForm, setCreateCustomerForm] = useState<{
     name: string;
+    ownerName: string;
     email: string;
     phone: string;
     openingBalance: string;
@@ -256,6 +383,7 @@ export function CreateDocumentPage() {
   }>(
     {
       name: '',
+      ownerName: '',
       email: '',
       phone: '',
       openingBalance: '',
@@ -391,6 +519,7 @@ export function CreateDocumentPage() {
       setCreateCustomerForm((prev) => {
         const next = { ...prev };
         if (!String(next.name || '').trim() && String(data?.name || '').trim()) next.name = String(data.name);
+        if (!String(next.ownerName || '').trim() && String(data?.ownerName || '').trim()) next.ownerName = String(data.ownerName);
         if (!String(next.pan || '').trim() && String(data?.pan || '').trim()) next.pan = String(data.pan);
 
         if (!String(next.billingAddress || '').trim() && String(data?.billingAddress || '').trim()) next.billingAddress = String(data.billingAddress);
@@ -398,11 +527,12 @@ export function CreateDocumentPage() {
         if (!String(next.billingState || '').trim() && String(data?.billingState || '').trim()) next.billingState = String(data.billingState);
         if (!String(next.billingPostalCode || '').trim() && String(data?.billingPostalCode || '').trim()) next.billingPostalCode = String(data.billingPostalCode);
 
-        if (!String(next.shippingAddress || '').trim() && String(data?.shippingAddress || '').trim()) next.shippingAddress = String(data.shippingAddress);
-        if (!String(next.shippingCity || '').trim() && String(data?.shippingCity || '').trim()) next.shippingCity = String(data.shippingCity);
-        if (!String(next.shippingState || '').trim() && String(data?.shippingState || '').trim()) next.shippingState = String(data.shippingState);
-        if (!String(next.shippingPostalCode || '').trim() && String(data?.shippingPostalCode || '').trim()) next.shippingPostalCode = String(data.shippingPostalCode);
-
+        if (createPartySameAsBilling && !createPartyShippingEdited) {
+          next.shippingAddress = next.billingAddress;
+          next.shippingCity = next.billingCity;
+          next.shippingState = next.billingState;
+          next.shippingPostalCode = next.billingPostalCode;
+        }
         return next;
       });
     } catch (e: any) {
@@ -1119,6 +1249,12 @@ export function CreateDocumentPage() {
       return;
     }
 
+    const ownerName = String(createCustomerForm.ownerName || '').trim();
+    if (!ownerName) {
+      toast.error('Owner name is required');
+      return;
+    }
+
     const errs = validateContactFields({
       gstin: String(createCustomerForm.gstin || ''),
       phone: String(createCustomerForm.phone || ''),
@@ -1135,8 +1271,8 @@ export function CreateDocumentPage() {
 
     setCreateCustomerSaving(true);
     try {
-      const createUrl = partyKind === 'supplier' ? `${apiUrl}/suppliers` : `${apiUrl}/customers`;
-      const res = await fetch(createUrl, {
+      const sameAsBilling = !!createPartySameAsBilling;
+      const res = await fetch(`${apiUrl}/${partyKind === 'supplier' ? 'suppliers' : 'customers'}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1146,6 +1282,7 @@ export function CreateDocumentPage() {
         },
         body: JSON.stringify({
           name,
+          ownerName,
           email: normalizeEmail(String(createCustomerForm.email || '')) || undefined,
           phone: normalizePhone(String(createCustomerForm.phone || '')) || undefined,
           openingBalance: Number.isFinite(openingBalance) ? openingBalance : undefined,
@@ -1156,10 +1293,18 @@ export function CreateDocumentPage() {
           billingCity: String(createCustomerForm.billingCity || '').trim() || undefined,
           billingState: String(createCustomerForm.billingState || '').trim() || undefined,
           billingPostalCode: String(createCustomerForm.billingPostalCode || '').trim() || undefined,
-          shippingAddress: String(createCustomerForm.shippingAddress || '').trim() || undefined,
-          shippingCity: String(createCustomerForm.shippingCity || '').trim() || undefined,
-          shippingState: String(createCustomerForm.shippingState || '').trim() || undefined,
-          shippingPostalCode: String(createCustomerForm.shippingPostalCode || '').trim() || undefined,
+          shippingAddress: (sameAsBilling
+            ? String(createCustomerForm.billingAddress || '').trim()
+            : String(createCustomerForm.shippingAddress || '').trim()) || undefined,
+          shippingCity: (sameAsBilling
+            ? String(createCustomerForm.billingCity || '').trim()
+            : String(createCustomerForm.shippingCity || '').trim()) || undefined,
+          shippingState: (sameAsBilling
+            ? String(createCustomerForm.billingState || '').trim()
+            : String(createCustomerForm.shippingState || '').trim()) || undefined,
+          shippingPostalCode: (sameAsBilling
+            ? String(createCustomerForm.billingPostalCode || '').trim()
+            : String(createCustomerForm.shippingPostalCode || '').trim()) || undefined,
           address: String(createCustomerForm.billingAddress || '').trim() || undefined,
           city: String(createCustomerForm.billingCity || '').trim() || undefined,
           state: String(createCustomerForm.billingState || '').trim() || undefined,
@@ -1210,8 +1355,11 @@ export function CreateDocumentPage() {
 
       setCreateCustomerOpen(false);
       setPartyPopoverOpen(false);
+      setCreatePartySameAsBilling(true);
+      setCreatePartyShippingEdited(false);
       setCreateCustomerForm({
         name: '',
+        ownerName: '',
         email: '',
         phone: '',
         openingBalance: '',
@@ -1492,21 +1640,16 @@ export function CreateDocumentPage() {
 
     if (type === 'invoice_cancellation') {
       if (!referenceDocumentId) {
-        toast.error('Reference invoice is required');
+        toast.error('Reference document is required for cancellation');
         return;
       }
     } else {
       if (!customerName.trim()) {
-        toast.error('Customer name is required');
-        return;
-      }
-      if (items.some(item => !item.name.trim())) {
-        toast.error('All items must have a name');
+        toast.error('Party name is required');
         return;
       }
     }
 
-    setSaving(true);
     try {
       const totals = type === 'invoice_cancellation'
         ? {
@@ -1708,7 +1851,47 @@ export function CreateDocumentPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <Collapsible open={optionsOpen} onOpenChange={setOptionsOpen}>
+                      <div className="flex items-center gap-2">
+                        <CollapsibleTrigger asChild>
+                          <Button type="button" variant="outline" size="sm">
+                            Options
+                            {optionsOpen ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                      <CollapsibleContent className="mt-2">
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-xs text-muted-foreground">Invoice Metadata</Label>
+                              <Switch checked={showInvoiceMetadata} onCheckedChange={setShowInvoiceMetadata} />
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-xs text-muted-foreground">Shipping & Logistics</Label>
+                              <Switch checked={showShippingLogistics} onCheckedChange={setShowShippingLogistics} />
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-xs text-muted-foreground">Bank Details</Label>
+                              <Switch checked={showBankDetails} onCheckedChange={setShowBankDetails} />
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-xs text-muted-foreground">Terms & Notes</Label>
+                              <Switch checked={showTermsNotes} onCheckedChange={setShowTermsNotes} />
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-xs text-muted-foreground">Payment</Label>
+                              <Switch checked={showPaymentBox} onCheckedChange={setShowPaymentBox} />
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-xs text-muted-foreground">Charges</Label>
+                              <Switch checked={showCharges} onCheckedChange={setShowCharges} />
+                            </div>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                     <Button type="button" variant="outline" onClick={() => navigate('/documents')}>
                       Cancel
                     </Button>
@@ -1721,14 +1904,18 @@ export function CreateDocumentPage() {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 items-start">
+            <div
+              className={`grid grid-cols-1 gap-4 items-start ${
+                showInvoiceMetadata ? 'lg:grid-cols-[3fr_2fr]' : 'lg:grid-cols-1'
+              }`}
+            >
               <div className="space-y-4">
                 <Card className="shadow-sm">
                   <CardHeader className="pb-0">
                     <CardTitle className="text-base">Customer & Billing Information</CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 space-y-4">
-                    <div className="max-w-[420px]">
+                    <div className="w-full">
                       <Label>{partyKind === 'supplier' ? 'Supplier' : 'Customer'} *</Label>
                       <Popover open={partyPopoverOpen} onOpenChange={setPartyPopoverOpen}>
                         <PopoverTrigger asChild>
@@ -1893,125 +2080,129 @@ export function CreateDocumentPage() {
                 </Card>
               </div>
 
-              <div className="space-y-4">
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-0">
-                    <CardTitle className="text-base">Invoice Metadata</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Ref No.</Label>
-                        <Input
-                          readOnly={type === 'proforma'}
-                          value={(type === 'proforma' ? (referenceNo || 'Auto') : referenceNo) || ''}
-                          onChange={(e) => {
-                            if (type !== 'proforma') setReferenceNo(e.target.value);
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Invoice Date</Label>
-                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Due Date</Label>
-                        <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>State of Supply</Label>
-                        <Select value={placeOfSupply} onValueChange={setPlaceOfSupply}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {INDIAN_STATES.map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {s}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+              {showInvoiceMetadata ? (
+                <div className="space-y-4">
+                  <Card className="shadow-sm">
+                    <CardHeader className="pb-0">
+                      <CardTitle className="text-base">Invoice Metadata</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Ref No.</Label>
+                          <Input
+                            readOnly={type === 'proforma'}
+                            value={(type === 'proforma' ? (referenceNo || 'Auto') : referenceNo) || ''}
+                            onChange={(e) => {
+                              if (type !== 'proforma') setReferenceNo(e.target.value);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Invoice Date</Label>
+                          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Due Date</Label>
+                          <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>State of Supply</Label>
+                          <Select value={placeOfSupply} onValueChange={setPlaceOfSupply}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {INDIAN_STATES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div className="space-y-2">
-                        <Label>Invoice No</Label>
-                        <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
+                        <div className="space-y-2">
+                          <Label>Invoice No</Label>
+                          <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Challan No</Label>
+                          <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Order No</Label>
+                          <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Revision No</Label>
+                          <Input value={revisionNumber} onChange={(e) => setRevisionNumber(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>PO No</Label>
+                          <Input value={purchaseOrderNo} onChange={(e) => setPurchaseOrderNo(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>PO Date</Label>
+                          <Input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Challan No</Label>
-                        <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Order No</Label>
-                        <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Revision No</Label>
-                        <Input value={revisionNumber} onChange={(e) => setRevisionNumber(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>PO No</Label>
-                        <Input value={purchaseOrderNo} onChange={(e) => setPurchaseOrderNo(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>PO Date</Label>
-                        <Input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
             </div>
 
-            <Card className="shadow-sm">
-              <CardHeader className="pb-0">
-                <CardTitle className="text-base">Shipping & Logistics</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                  <div className="space-y-2">
-                    <Label>E-Way Bill No</Label>
-                    <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} />
+            {showShippingLogistics ? (
+              <Card className="shadow-sm">
+                <CardHeader className="pb-0">
+                  <CardTitle className="text-base">Shipping & Logistics</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="space-y-2">
+                      <Label>E-Way Bill No</Label>
+                      <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>E-Way Bill Date</Label>
+                      <Input type="date" value={ewayBillDate} onChange={(e) => setEwayBillDate(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Valid Upto</Label>
+                      <Input type="date" value={ewayBillValidUpto} onChange={(e) => setEwayBillValidUpto(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Transporter Name</Label>
+                      <Input value={ewayBillTransporterName} onChange={(e) => setEwayBillTransporterName(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Vehicle No</Label>
+                      <Input value={ewayBillVehicleNo} onChange={(e) => setEwayBillVehicleNo(e.target.value)} />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>E-Way Bill Date</Label>
-                    <Input type="date" value={ewayBillDate} onChange={(e) => setEwayBillDate(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Valid Upto</Label>
-                    <Input type="date" value={ewayBillValidUpto} onChange={(e) => setEwayBillValidUpto(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Transporter Name</Label>
-                    <Input value={ewayBillTransporterName} onChange={(e) => setEwayBillTransporterName(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Vehicle No</Label>
-                    <Input value={ewayBillVehicleNo} onChange={(e) => setEwayBillVehicleNo(e.target.value)} />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-                  <div className="space-y-2">
-                    <Label>Transporter Doc No</Label>
-                    <Input value={ewayBillTransporterDocNo} onChange={(e) => setEwayBillTransporterDocNo(e.target.value)} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                    <div className="space-y-2">
+                      <Label>Transporter Doc No</Label>
+                      <Input value={ewayBillTransporterDocNo} onChange={(e) => setEwayBillTransporterDocNo(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Distance (Km)</Label>
+                      <Input value={ewayBillDistanceKm} onChange={(e) => setEwayBillDistanceKm(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Transport</Label>
+                      <Input value={transport} onChange={(e) => setTransport(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Transport ID</Label>
+                      <Input value={transportId} onChange={(e) => setTransportId(e.target.value)} />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Distance (Km)</Label>
-                    <Input value={ewayBillDistanceKm} onChange={(e) => setEwayBillDistanceKm(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Transport</Label>
-                    <Input value={transport} onChange={(e) => setTransport(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Transport ID</Label>
-                    <Input value={transportId} onChange={(e) => setTransportId(e.target.value)} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card className="shadow-sm">
               <CardContent className="p-0">
@@ -2227,279 +2418,328 @@ export function CreateDocumentPage() {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start">
+            <div
+              className={`grid grid-cols-1 gap-4 items-start ${
+                showPaymentBox || showCharges ? 'lg:grid-cols-[1fr_360px]' : 'lg:grid-cols-1'
+              }`}
+            >
               <div className="flex flex-col gap-4">
-                <Card className="shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2 space-y-2">
-                        <Label>Bank Account</Label>
-                        <Select
-                          value={bankAccountId || '__custom__'}
-                          onValueChange={(v) => {
-                            const next = String(v || '');
-                            if (next === '__custom__') {
-                              setBankAccountId('');
-                              return;
-                            }
-                            if (next === '__null__') {
-                              setBankAccountId('__null__');
-                              setBankName(String((currentProfile as any)?.bankName || ''));
-                              setBankBranch(String((currentProfile as any)?.bankBranch || ''));
-                              setBankAccountNumber(String((currentProfile as any)?.accountNumber || ''));
-                              setBankIfsc(String((currentProfile as any)?.ifscCode || ''));
-                              setUpiId(String((currentProfile as any)?.upiId || ''));
-                              setUpiQrText('');
-                              return;
-                            }
-                            setBankAccountId(next);
+                {showBankDetails ? (
+                  <>
+                    <Card className="shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-2 space-y-2">
+                            <Label>Bank Account</Label>
+                            <Select
+                              value={bankAccountId || '__custom__'}
+                              onValueChange={(v) => {
+                                const next = String(v || '');
+                                if (next === '__custom__') {
+                                  setBankAccountId('');
+                                  return;
+                                }
+                                if (next === '__null__') {
+                                  setBankAccountId('__null__');
+                                  setBankName(String((currentProfile as any)?.bankName || ''));
+                                  setBankBranch(String((currentProfile as any)?.bankBranch || ''));
+                                  setBankAccountNumber(String((currentProfile as any)?.accountNumber || ''));
+                                  setBankIfsc(String((currentProfile as any)?.ifscCode || ''));
+                                  setUpiId(String((currentProfile as any)?.upiId || ''));
+                                  setUpiQrText('');
+                                  return;
+                                }
+                                setBankAccountId(next);
 
-                            const accounts = Array.isArray(currentProfile?.bankAccounts) ? currentProfile.bankAccounts : [];
-                            const selected = accounts.find((a: any) => String(a?._id || '') === String(next));
-                            if (!selected) return;
+                                const accounts = Array.isArray(currentProfile?.bankAccounts) ? currentProfile.bankAccounts : [];
+                                const selected = accounts.find((a: any) => String(a?._id || '') === String(next));
+                                if (!selected) return;
 
-                            setBankName(String(selected?.bankName || ''));
-                            setBankBranch(String(selected?.bankBranch || ''));
-                            setBankAccountNumber(String(selected?.accountNumber || ''));
-                            setBankIfsc(String(selected?.ifscCode || ''));
-                            setUpiId(String(selected?.upiId || ''));
-                            setUpiQrText(String(selected?.upiQrText || ''));
+                                setBankName(String(selected?.bankName || ''));
+                                setBankBranch(String(selected?.bankBranch || ''));
+                                setBankAccountNumber(String(selected?.accountNumber || ''));
+                                setBankIfsc(String(selected?.ifscCode || ''));
+                                setUpiId(String(selected?.upiId || ''));
+                                setUpiQrText(String(selected?.upiQrText || ''));
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__custom__">Custom</SelectItem>
+                                {(() => {
+                                  const legacyBankName = String((currentProfile as any)?.bankName || '').trim();
+                                  const legacyAcc = String((currentProfile as any)?.accountNumber || '').trim();
+                                  const legacyIfsc = String((currentProfile as any)?.ifscCode || '').trim();
+                                  const legacyUpi = String((currentProfile as any)?.upiId || '').trim();
+                                  const hasLegacy = !!(legacyBankName || legacyAcc || legacyIfsc || legacyUpi);
+                                  if (!hasLegacy) return null;
+                                  return <SelectItem value="__null__">{legacyBankName || 'Primary Bank'}</SelectItem>;
+                                })()}
+                                {(Array.isArray((currentProfile as any)?.bankAccounts) ? (currentProfile as any).bankAccounts : []).map((a: any) => (
+                                  <SelectItem key={String(a?._id || a?.label || Math.random())} value={String(a?._id || '')}>
+                                    {String(a?.label || a?.bankName || 'Bank Account')}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Bank Name</Label>
+                            <Input value={bankName} onChange={(e) => setBankName(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Branch</Label>
+                            <Input value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Account Number</Label>
+                            <Input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>IFSC</Label>
+                            <Input value={bankIfsc} onChange={(e) => setBankIfsc(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>UPI ID</Label>
+                            <Input value={upiId} onChange={(e) => setUpiId(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>UPI QR Text</Label>
+                            <Input value={upiQrText} onChange={(e) => setUpiQrText(e.target.value)} />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                  </>
+                ) : null}
+
+                {showTermsNotes ? (
+                  <>
+                    <Card className="shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Payment Terms</Label>
+                            <Input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Credit Period</Label>
+                            <Input value={creditPeriod} onChange={(e) => setCreditPeriod(e.target.value)} />
+                          </div>
+                          <div className="md:col-span-2 space-y-2">
+                            <Label>Late Fee Terms</Label>
+                            <Textarea value={lateFeeTerms} onChange={(e) => setLateFeeTerms(e.target.value)} rows={2} />
+                          </div>
+                          <div className="md:col-span-2 space-y-2">
+                            <Label>Warranty/Return/Cancellation</Label>
+                            <Textarea
+                              value={warrantyReturnCancellationPolicies}
+                              onChange={(e) => setWarrantyReturnCancellationPolicies(e.target.value)}
+                              rows={2}
+                            />
+                          </div>
+                          <div className="md:col-span-2 space-y-2">
+                            <Label>Internal Notes</Label>
+                            <Textarea value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} rows={2} />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setProformaShowDescription(true)}>
+                        Add Description
+                      </Button>
+                      <div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          id="proforma-attachment-input"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] || null;
+                            setProformaAttachment(f);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const el = document.getElementById('proforma-attachment-input') as HTMLInputElement | null;
+                            el?.click();
                           }}
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__custom__">Custom</SelectItem>
-                            {(() => {
-                              const legacyBankName = String((currentProfile as any)?.bankName || '').trim();
-                              const legacyAcc = String((currentProfile as any)?.accountNumber || '').trim();
-                              const legacyIfsc = String((currentProfile as any)?.ifscCode || '').trim();
-                              const legacyUpi = String((currentProfile as any)?.upiId || '').trim();
-                              const hasLegacy = !!(legacyBankName || legacyAcc || legacyIfsc || legacyUpi);
-                              if (!hasLegacy) return null;
-                              return (
-                                <SelectItem value="__null__">{legacyBankName || 'Primary Bank'}</SelectItem>
-                              );
-                            })()}
-                            {(Array.isArray((currentProfile as any)?.bankAccounts) ? (currentProfile as any).bankAccounts : []).map((a: any) => (
-                              <SelectItem key={String(a?._id || a?.label || Math.random())} value={String(a?._id || '')}>
-                                {String(a?.label || a?.bankName || 'Bank Account')}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Bank Name</Label>
-                        <Input value={bankName} onChange={(e) => setBankName(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Branch</Label>
-                        <Input value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Account Number</Label>
-                        <Input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>IFSC</Label>
-                        <Input value={bankIfsc} onChange={(e) => setBankIfsc(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>UPI ID</Label>
-                        <Input value={upiId} onChange={(e) => setUpiId(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>UPI QR Text</Label>
-                        <Input value={upiQrText} onChange={(e) => setUpiQrText(e.target.value)} />
+                          Add Image
+                        </Button>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
 
-                <Card className="shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Payment Terms</Label>
-                        <Input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Credit Period</Label>
-                        <Input value={creditPeriod} onChange={(e) => setCreditPeriod(e.target.value)} />
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <Label>Late Fee Terms</Label>
-                        <Textarea value={lateFeeTerms} onChange={(e) => setLateFeeTerms(e.target.value)} rows={2} />
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <Label>Warranty/Return/Cancellation</Label>
-                        <Textarea
-                          value={warrantyReturnCancellationPolicies}
-                          onChange={(e) => setWarrantyReturnCancellationPolicies(e.target.value)}
-                          rows={2}
-                        />
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <Label>Internal Notes</Label>
-                        <Textarea value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} rows={2} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setProformaShowDescription(true)}>
-                    Add Description
-                  </Button>
-                  <div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      id="proforma-attachment-input"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] || null;
-                        setProformaAttachment(f);
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const el = document.getElementById('proforma-attachment-input') as HTMLInputElement | null;
-                        el?.click();
-                      }}
-                    >
-                      Add Image
-                    </Button>
-                  </div>
-                </div>
-
-                {proformaShowDescription && (
-                  <div className="mt-2 max-w-[520px]">
-                    <Label>Description</Label>
-                    <Textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={3}
-                      placeholder="Enter description"
-                    />
-                  </div>
-                )}
-
-                <Card className="shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="mt-2 max-w-[520px]">
-                      <Label>Description</Label>
-                      <Textarea
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        rows={3}
-                        placeholder="Enter description"
-                      />
-                    </div>
-
-                    <div className="mt-4 max-w-[520px]">
-                      <Label>Terms & Conditions</Label>
-                      <Textarea
-                        value={termsConditions}
-                        onChange={(e) => setTermsConditions(e.target.value)}
-                        rows={4}
-                        placeholder="Enter terms and conditions"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {proformaAttachment && (
-                  <div className="text-xs text-muted-foreground">Attachment: {proformaAttachment.name}</div>
-                )}
-              </div>
-
-              <div className="lg:sticky lg:top-20 space-y-4">
-                <Card className="shadow-sm bg-background/80">
-                  <CardContent className="p-4 space-y-3">
-                    {shouldShowPaymentMode && (
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Payment Type</Label>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="cash">Cash</SelectItem>
-                              <SelectItem value="online">Online</SelectItem>
-                              <SelectItem value="cheque">Cheque</SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          <Select value={paymentStatus} onValueChange={(v) => setPaymentStatus(v as 'unpaid' | 'partial' | 'paid')}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="unpaid">Unpaid</SelectItem>
-                              <SelectItem value="partial">Partial</SelectItem>
-                              <SelectItem value="paid">Paid</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                    {proformaShowDescription && (
+                      <div className="mt-2 w-full">
+                        <Label>Description</Label>
+                        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Enter description" />
                       </div>
                     )}
 
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Received Amount</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={receivedAmount}
-                        onChange={(e) => {
-                          const next = Number(e.target.value || 0);
-                          if (!Number.isFinite(next) || next < 0) return;
-                          setReceivedAmount(next);
-                        }}
-                        placeholder={`0 (${primarySymbol})`}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
+                    <Card className="shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="mt-2 w-full">
+                          <Label>Description</Label>
+                          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Enter description" />
+                        </div>
 
-                <Card className="shadow-sm">
-                  <CardContent className="p-4 space-y-4">
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-2">
-                        <Label>Transport Charges</Label>
-                        <Input type="number" value={transportCharges} onChange={(e) => setTransportCharges(Number(e.target.value || 0))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Additional Charges</Label>
-                        <Input type="number" value={additionalCharges} onChange={(e) => setAdditionalCharges(Number(e.target.value || 0))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Packing/Handling</Label>
-                        <Input type="number" value={packingHandlingCharges} onChange={(e) => setPackingHandlingCharges(Number(e.target.value || 0))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>TCS</Label>
-                        <Input type="number" value={tcs} onChange={(e) => setTcs(Number(e.target.value || 0))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Round Off</Label>
-                        <Input type="number" value={roundOff} onChange={(e) => setRoundOff(Number(e.target.value || 0))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Auto Round Off</Label>
-                        <div className="flex items-center">
-                          <Switch checked={autoRoundOff} onCheckedChange={setAutoRoundOff} />
+                        <div className="mt-4 w-full">
+                          <Label>Terms & Conditions</Label>
+                          <Textarea
+                            value={termsConditions}
+                            onChange={(e) => setTermsConditions(e.target.value)}
+                            rows={4}
+                            placeholder="Enter terms and conditions"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {proformaAttachment && <div className="text-xs text-muted-foreground">Attachment: {proformaAttachment.name}</div>}
+                  </>
+                ) : null}
+
+                {!(showPaymentBox || showCharges) ? (
+                  <Card className="shadow-sm bg-background/80">
+                    <CardContent className="p-4 space-y-3">
+                      {(() => {
+                        const t = proformaTotals();
+                        const received = Math.max(0, Number(receivedAmount || 0));
+                        const balance = Math.max(0, Number(t.grandTotal || 0) - received);
+                        return (
+                          <>
+                            <div className="rounded-md overflow-hidden border bg-background">
+                              <div className="px-3 py-2 text-sm font-semibold bg-primary/40 text-foreground">Amounts</div>
+
+                              <div className="px-3 py-2 border-t flex items-center justify-between text-sm">
+                                <div className="text-muted-foreground">Sub total</div>
+                                <div className="font-medium">{formatInr(t.subtotal)}</div>
+                              </div>
+
+                              <div className="px-3 py-2 border-t flex items-center justify-between text-sm font-semibold">
+                                <div>Total</div>
+                                <div>{formatInr(t.grandTotal)}</div>
+                              </div>
+
+                              <div className="px-3 py-2 border-t flex items-center justify-between text-sm">
+                                <div className="text-muted-foreground">Received</div>
+                                <div className="font-medium">{formatInr(received)}</div>
+                              </div>
+
+                              <div className="px-3 py-2 border-t flex items-center justify-between text-sm">
+                                <div className="text-muted-foreground">Balance</div>
+                                <div className="font-medium">{formatInr(balance)}</div>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
+
+              {showPaymentBox || showCharges ? (
+                <div className="lg:sticky lg:top-20 space-y-4">
+                {showPaymentBox ? (
+                  <>
+                    <Card className="shadow-sm bg-background/80">
+                      <CardContent className="p-4 space-y-3">
+                        {shouldShowPaymentMode && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Payment Type</Label>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="cash">Cash</SelectItem>
+                                  <SelectItem value="online">Online</SelectItem>
+                                  <SelectItem value="cheque">Cheque</SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              <Select value={paymentStatus} onValueChange={(v) => setPaymentStatus(v as 'unpaid' | 'partial' | 'paid')}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                                  <SelectItem value="partial">Partial</SelectItem>
+                                  <SelectItem value="paid">Paid</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Received Amount</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={receivedAmount}
+                            onChange={(e) => {
+                              const next = Number(e.target.value || 0);
+                              if (!Number.isFinite(next) || next < 0) return;
+                              setReceivedAmount(next);
+                            }}
+                            placeholder={`0 (${primarySymbol})`}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : null}
+
+                {showCharges ? (
+                  <Card className="shadow-sm">
+                    <CardContent className="p-4 space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-2">
+                          <Label>Transport Charges</Label>
+                          <Input type="number" value={transportCharges} onChange={(e) => setTransportCharges(Number(e.target.value || 0))} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Additional Charges</Label>
+                          <Input type="number" value={additionalCharges} onChange={(e) => setAdditionalCharges(Number(e.target.value || 0))} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Packing/Handling</Label>
+                          <Input
+                            type="number"
+                            value={packingHandlingCharges}
+                            onChange={(e) => setPackingHandlingCharges(Number(e.target.value || 0))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>TCS</Label>
+                          <Input type="number" value={tcs} onChange={(e) => setTcs(Number(e.target.value || 0))} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Round Off</Label>
+                          <Input type="number" value={roundOff} onChange={(e) => setRoundOff(Number(e.target.value || 0))} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Auto Round Off</Label>
+                          <div className="flex items-center">
+                            <Switch checked={autoRoundOff} onCheckedChange={setAutoRoundOff} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                ) : null}
 
                 <Card className="shadow-sm bg-background/80">
                   <CardContent className="p-4 space-y-3">
@@ -2538,10 +2778,20 @@ export function CreateDocumentPage() {
                   </CardContent>
                 </Card>
               </div>
-            </div>
-          </div>
+              ) : null}
 
-        <Sheet open={createCustomerOpen} onOpenChange={setCreateCustomerOpen}>
+            </div>
+
+        <Sheet
+          open={createCustomerOpen}
+          onOpenChange={(open) => {
+            setCreateCustomerOpen(open);
+            if (!open) {
+              setCreatePartySameAsBilling(true);
+              setCreatePartyShippingEdited(false);
+            }
+          }}
+        >
           <SheetContent side="right" className="w-full sm:max-w-[520px] md:max-w-[600px]">
             <SheetHeader>
               <SheetTitle>{partyKind === 'supplier' ? 'Create Supplier' : 'Create Customer'}</SheetTitle>
@@ -2551,11 +2801,19 @@ export function CreateDocumentPage() {
             </SheetHeader>
             <div className="mt-4 space-y-4 flex-1 overflow-y-auto px-4 pb-4">
               <div className="space-y-2">
-                <Label>{partyKind === 'supplier' ? 'Supplier Name *' : 'Customer Name *'}</Label>
+                <Label>{partyKind === 'supplier' ? 'Party Name *' : 'Party Name *'}</Label>
                 <Input
                   value={createCustomerForm.name}
                   onChange={(e) => setCreateCustomerForm((p) => ({ ...p, name: e.target.value }))}
                   placeholder="Enter name"
+                />
+              </div>
+              <div>
+                <Label>Owner Name *</Label>
+                <Input
+                  value={createCustomerForm.ownerName}
+                  onChange={(e) => setCreateCustomerForm((p) => ({ ...p, ownerName: e.target.value }))}
+                  placeholder="Owner / Proprietor"
                 />
               </div>
               <div>
@@ -2669,9 +2927,53 @@ export function CreateDocumentPage() {
                 <Label>Billing Address</Label>
                 <Textarea
                   value={createCustomerForm.billingAddress}
-                  onChange={(e) => setCreateCustomerForm((p) => ({ ...p, billingAddress: e.target.value }))}
+                  onChange={(e) =>
+                    setCreateCustomerForm((p) => {
+                      const billingAddress = e.target.value;
+                      return {
+                        ...p,
+                        billingAddress,
+                        shippingAddress: createPartySameAsBilling ? billingAddress : p.shippingAddress,
+                      };
+                    })
+                  }
                   rows={3}
                   placeholder="Enter billing address"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={createPartySameAsBilling}
+                  onCheckedChange={(checked) => {
+                    const next = !!checked;
+                    setCreatePartySameAsBilling(next);
+                    if (next) {
+                      setCreatePartyShippingEdited(false);
+                      setCreateCustomerForm((p) => ({
+                        ...p,
+                        shippingAddress: p.billingAddress,
+                        shippingCity: p.billingCity,
+                        shippingState: p.billingState,
+                        shippingPostalCode: p.billingPostalCode,
+                      }));
+                    }
+                  }}
+                />
+                <Label>Shipping same as Billing</Label>
+              </div>
+
+              <div>
+                <Label>Shipping Address</Label>
+                <Textarea
+                  value={createCustomerForm.shippingAddress}
+                  onChange={(e) => {
+                    if (createPartySameAsBilling) setCreatePartySameAsBilling(false);
+                    setCreatePartyShippingEdited(true);
+                    setCreateCustomerForm((p) => ({ ...p, shippingAddress: e.target.value }));
+                  }}
+                  rows={3}
+                  placeholder="Enter shipping address"
                 />
               </div>
 
@@ -2680,7 +2982,13 @@ export function CreateDocumentPage() {
                   <Label>Billing City</Label>
                   <Input
                     value={createCustomerForm.billingCity}
-                    onChange={(e) => setCreateCustomerForm((p) => ({ ...p, billingCity: e.target.value }))}
+                    onChange={(e) =>
+                      setCreateCustomerForm((p) => ({
+                        ...p,
+                        billingCity: e.target.value,
+                        shippingCity: createPartySameAsBilling ? e.target.value : p.shippingCity,
+                      }))
+                    }
                     placeholder="City"
                   />
                 </div>
@@ -2688,7 +2996,13 @@ export function CreateDocumentPage() {
                   <Label>Billing State</Label>
                   <Input
                     value={createCustomerForm.billingState}
-                    onChange={(e) => setCreateCustomerForm((p) => ({ ...p, billingState: e.target.value }))}
+                    onChange={(e) =>
+                      setCreateCustomerForm((p) => ({
+                        ...p,
+                        billingState: e.target.value,
+                        shippingState: createPartySameAsBilling ? e.target.value : p.shippingState,
+                      }))
+                    }
                     placeholder="State"
                   />
                 </div>
@@ -2696,20 +3010,16 @@ export function CreateDocumentPage() {
                   <Label>Billing Postal Code</Label>
                   <Input
                     value={createCustomerForm.billingPostalCode}
-                    onChange={(e) => setCreateCustomerForm((p) => ({ ...p, billingPostalCode: e.target.value }))}
+                    onChange={(e) =>
+                      setCreateCustomerForm((p) => ({
+                        ...p,
+                        billingPostalCode: e.target.value,
+                        shippingPostalCode: createPartySameAsBilling ? e.target.value : p.shippingPostalCode,
+                      }))
+                    }
                     placeholder="560001"
                   />
                 </div>
-              </div>
-
-              <div>
-                <Label>Shipping Address</Label>
-                <Textarea
-                  value={createCustomerForm.shippingAddress}
-                  onChange={(e) => setCreateCustomerForm((p) => ({ ...p, shippingAddress: e.target.value }))}
-                  rows={3}
-                  placeholder="Enter shipping address"
-                />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -2717,7 +3027,11 @@ export function CreateDocumentPage() {
                   <Label>Shipping City</Label>
                   <Input
                     value={createCustomerForm.shippingCity}
-                    onChange={(e) => setCreateCustomerForm((p) => ({ ...p, shippingCity: e.target.value }))}
+                    onChange={(e) => {
+                      if (createPartySameAsBilling) setCreatePartySameAsBilling(false);
+                      setCreatePartyShippingEdited(true);
+                      setCreateCustomerForm((p) => ({ ...p, shippingCity: e.target.value }));
+                    }}
                     placeholder="City"
                   />
                 </div>
@@ -2725,7 +3039,11 @@ export function CreateDocumentPage() {
                   <Label>Shipping State</Label>
                   <Input
                     value={createCustomerForm.shippingState}
-                    onChange={(e) => setCreateCustomerForm((p) => ({ ...p, shippingState: e.target.value }))}
+                    onChange={(e) => {
+                      if (createPartySameAsBilling) setCreatePartySameAsBilling(false);
+                      setCreatePartyShippingEdited(true);
+                      setCreateCustomerForm((p) => ({ ...p, shippingState: e.target.value }));
+                    }}
                     placeholder="State"
                   />
                 </div>
@@ -2733,7 +3051,11 @@ export function CreateDocumentPage() {
                   <Label>Shipping Postal Code</Label>
                   <Input
                     value={createCustomerForm.shippingPostalCode}
-                    onChange={(e) => setCreateCustomerForm((p) => ({ ...p, shippingPostalCode: e.target.value }))}
+                    onChange={(e) => {
+                      if (createPartySameAsBilling) setCreatePartySameAsBilling(false);
+                      setCreatePartyShippingEdited(true);
+                      setCreateCustomerForm((p) => ({ ...p, shippingPostalCode: e.target.value }));
+                    }}
                     placeholder="560001"
                   />
                 </div>
@@ -2925,6 +3247,7 @@ export function CreateDocumentPage() {
           </DialogContent>
         </Dialog>
 
+      </div>
       </div>
       </div>
     </AppLayout>

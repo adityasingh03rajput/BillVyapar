@@ -33,7 +33,7 @@ export function MasterAdminAuditPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 w-full">
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-2xl flex items-center justify-center"
           style={{ background: '#ede9fe', border: '1.5px solid #ddd6fe', boxShadow: '0 4px 12px rgba(139,92,246,0.15)' }}>

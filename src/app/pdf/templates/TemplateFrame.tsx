@@ -309,7 +309,7 @@ export function TemplateCommonHeader({ doc, profile }: PdfTemplateProps) {
         <div style={{ fontSize: 12, letterSpacing: 1.4, fontWeight: 800, color: '#111827' }}>
           {docTitleFromType(doc.type)}
         </div>
-        <div style={{ fontSize: 11, color: '#6B7280', marginTop: 10 }}>Doc No: {doc.documentNumber}</div>
+        <div style={{ fontSize: 11, color: '#6B7280', marginTop: 10 }}>Doc No: {safeText(doc.invoiceNo) || doc.documentNumber}</div>
         {!!doc.date && <div style={{ fontSize: 11, color: '#6B7280' }}>Date: {doc.date}</div>}
         {!!doc.dueDate && <div style={{ fontSize: 11, color: '#6B7280' }}>Due: {doc.dueDate}</div>}
       </div>

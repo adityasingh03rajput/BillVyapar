@@ -24,6 +24,7 @@ import { TraceLoader } from '../components/TraceLoader';
 interface Supplier {
   id: string;
   name: string;
+  ownerName?: string;
   email?: string;
   phone?: string;
   logoDataUrl?: string | null;
@@ -130,6 +131,7 @@ export function SuppliersPage() {
       const apply = (prev: Partial<Supplier>) => {
         const next: Partial<Supplier> = { ...prev };
         if (!String(next.name || '').trim() && String(data?.name || '').trim()) next.name = String(data.name);
+        if (!String(next.ownerName || '').trim() && String(data?.ownerName || '').trim()) next.ownerName = String(data.ownerName);
         if (!String(next.pan || '').trim() && String(data?.pan || '').trim()) next.pan = String(data.pan);
         if (!String(next.address || '').trim() && String(data?.billingAddress || data?.address || '').trim()) {
           next.address = String(data?.billingAddress || data?.address || '');
@@ -303,7 +305,12 @@ export function SuppliersPage() {
     if (!editingSupplierId) return;
 
     if (!editFormData.name?.trim()) {
-      toast.error('Supplier name is required');
+      toast.error('Party name is required');
+      return;
+    }
+
+    if (!String(editFormData.ownerName || '').trim()) {
+      toast.error('Owner name is required');
       return;
     }
 
@@ -320,6 +327,12 @@ export function SuppliersPage() {
 
     try {
       const payload: any = { ...editFormData };
+
+      const addressValue = String(payload.address || '').trim();
+      payload.billingAddress = addressValue || undefined;
+      payload.shippingAddress = addressValue || undefined;
+      payload.address = addressValue || undefined;
+
       if (typeof payload.email === 'string') payload.email = normalizeEmail(payload.email) || undefined;
       if (typeof payload.phone === 'string') payload.phone = normalizePhone(payload.phone) || undefined;
       if (typeof payload.gstin === 'string') payload.gstin = normalizeGstin(payload.gstin) || undefined;
@@ -355,7 +368,12 @@ export function SuppliersPage() {
     e.preventDefault();
 
     if (!formData.name?.trim()) {
-      toast.error('Supplier name is required');
+      toast.error('Party name is required');
+      return;
+    }
+
+    if (!String(formData.ownerName || '').trim()) {
+      toast.error('Owner name is required');
       return;
     }
 
@@ -372,6 +390,11 @@ export function SuppliersPage() {
 
     try {
       const payload: any = { ...formData };
+
+      const addressValue = String(payload.address || '').trim();
+      payload.billingAddress = addressValue || undefined;
+      payload.shippingAddress = addressValue || undefined;
+      payload.address = addressValue || undefined;
       if (typeof payload.email === 'string') payload.email = normalizeEmail(payload.email) || undefined;
       if (typeof payload.phone === 'string') payload.phone = normalizePhone(payload.phone) || undefined;
       if (typeof payload.gstin === 'string') payload.gstin = normalizeGstin(payload.gstin) || undefined;
@@ -525,12 +548,21 @@ export function SuppliersPage() {
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <Label>Supplier Name *</Label>
+                    <Label>Party Name *</Label>
                     <Input
                       required
                       value={formData.name || ''}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="Enter name"
+                    />
+                  </div>
+                  <div>
+                    <Label>Owner Name *</Label>
+                    <Input
+                      required
+                      value={String(formData.ownerName || '')}
+                      onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                      placeholder="Owner / Proprietor"
                     />
                   </div>
                   <div>
@@ -865,12 +897,21 @@ export function SuppliersPage() {
             <form onSubmit={handleUpdateSupplier} className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Supplier Name *</Label>
+                  <Label>Party Name *</Label>
                   <Input
                     required
                     value={editFormData.name || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
                     placeholder="Enter name"
+                  />
+                </div>
+                <div>
+                  <Label>Owner Name *</Label>
+                  <Input
+                    required
+                    value={String(editFormData.ownerName || '')}
+                    onChange={(e) => setEditFormData({ ...editFormData, ownerName: e.target.value })}
+                    placeholder="Owner / Proprietor"
                   />
                 </div>
                 <div>

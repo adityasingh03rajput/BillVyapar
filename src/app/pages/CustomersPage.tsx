@@ -25,6 +25,7 @@ import { TraceLoader } from '../components/TraceLoader';
 interface Customer {
   id: string;
   name: string;
+  ownerName?: string;
   email?: string;
   phone?: string;
   logoDataUrl?: string | null;
@@ -137,6 +138,7 @@ export function CustomersPage() {
       const apply = (prev: Partial<Customer>) => {
         const next: Partial<Customer> = { ...prev };
         if (!String(next.name || '').trim() && String(data?.name || '').trim()) next.name = String(data.name);
+        if (!String(next.ownerName || '').trim() && String(data?.ownerName || '').trim()) next.ownerName = String(data.ownerName);
         if (!String(next.pan || '').trim() && String(data?.pan || '').trim()) next.pan = String(data.pan);
 
         if (!String(next.billingAddress || '').trim() && String(data?.billingAddress || '').trim()) next.billingAddress = String(data.billingAddress);
@@ -144,10 +146,10 @@ export function CustomersPage() {
         if (!String(next.billingState || '').trim() && String(data?.billingState || '').trim()) next.billingState = String(data.billingState);
         if (!String(next.billingPostalCode || '').trim() && String(data?.billingPostalCode || '').trim()) next.billingPostalCode = String(data.billingPostalCode);
 
-        if (!String(next.shippingAddress || '').trim() && String(data?.shippingAddress || '').trim()) next.shippingAddress = String(data.shippingAddress);
-        if (!String(next.shippingCity || '').trim() && String(data?.shippingCity || '').trim()) next.shippingCity = String(data.shippingCity);
-        if (!String(next.shippingState || '').trim() && String(data?.shippingState || '').trim()) next.shippingState = String(data.shippingState);
-        if (!String(next.shippingPostalCode || '').trim() && String(data?.shippingPostalCode || '').trim()) next.shippingPostalCode = String(data.shippingPostalCode);
+        next.shippingAddress = String(next.billingAddress || '');
+        next.shippingCity = String(next.billingCity || '');
+        next.shippingState = String(next.billingState || '');
+        next.shippingPostalCode = String(next.billingPostalCode || '');
 
         return next;
       };
@@ -539,7 +541,12 @@ export function CustomersPage() {
     if (!editingCustomerId) return;
 
     if (!editFormData.name?.trim()) {
-      toast.error('Customer name is required');
+      toast.error('Party name is required');
+      return;
+    }
+
+    if (!String(editFormData.ownerName || '').trim()) {
+      toast.error('Owner name is required');
       return;
     }
 
@@ -556,6 +563,22 @@ export function CustomersPage() {
 
     try {
       const payload: any = { ...editFormData };
+
+      const billingAddressValue = String(payload.billingAddress || '').trim();
+      const billingCityValue = String(payload.billingCity || '').trim();
+      const billingStateValue = String(payload.billingState || '').trim();
+      const billingPostalCodeValue = String(payload.billingPostalCode || '').trim();
+
+      delete payload.shippingAddress;
+      delete payload.shippingCity;
+      delete payload.shippingState;
+      delete payload.shippingPostalCode;
+
+      payload.shippingAddress = billingAddressValue || undefined;
+      payload.shippingCity = billingCityValue || undefined;
+      payload.shippingState = billingStateValue || undefined;
+      payload.shippingPostalCode = billingPostalCodeValue || undefined;
+
       if (typeof payload.email === 'string') payload.email = normalizeEmail(payload.email) || undefined;
       if (typeof payload.phone === 'string') payload.phone = normalizePhone(payload.phone) || undefined;
       if (typeof payload.gstin === 'string') payload.gstin = normalizeGstin(payload.gstin) || undefined;
@@ -591,7 +614,12 @@ export function CustomersPage() {
     e.preventDefault();
     
     if (!formData.name?.trim()) {
-      toast.error('Customer name is required');
+      toast.error('Party name is required');
+      return;
+    }
+
+    if (!String(formData.ownerName || '').trim()) {
+      toast.error('Owner name is required');
       return;
     }
 
@@ -608,6 +636,22 @@ export function CustomersPage() {
 
     try {
       const payload: any = { ...formData };
+
+      const billingAddressValue = String(payload.billingAddress || '').trim();
+      const billingCityValue = String(payload.billingCity || '').trim();
+      const billingStateValue = String(payload.billingState || '').trim();
+      const billingPostalCodeValue = String(payload.billingPostalCode || '').trim();
+
+      delete payload.shippingAddress;
+      delete payload.shippingCity;
+      delete payload.shippingState;
+      delete payload.shippingPostalCode;
+
+      payload.shippingAddress = billingAddressValue || undefined;
+      payload.shippingCity = billingCityValue || undefined;
+      payload.shippingState = billingStateValue || undefined;
+      payload.shippingPostalCode = billingPostalCodeValue || undefined;
+
       if (typeof payload.email === 'string') payload.email = normalizeEmail(payload.email) || undefined;
       if (typeof payload.phone === 'string') payload.phone = normalizePhone(payload.phone) || undefined;
       if (typeof payload.gstin === 'string') payload.gstin = normalizeGstin(payload.gstin) || undefined;
@@ -766,12 +810,21 @@ export function CustomersPage() {
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <Label>Customer Name *</Label>
+                      <Label>Party Name *</Label>
                       <Input
                         required
                         value={formData.name || ''}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         placeholder="Enter name"
+                      />
+                    </div>
+                    <div>
+                      <Label>Owner Name *</Label>
+                      <Input
+                        required
+                        value={String(formData.ownerName || '')}
+                        onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                        placeholder="Owner / Proprietor"
                       />
                     </div>
                     <div>
@@ -889,7 +942,16 @@ export function CustomersPage() {
                   <Label>Billing Address</Label>
                   <Textarea
                     value={formData.billingAddress || ''}
-                    onChange={(e) => setFormData({...formData, billingAddress: e.target.value})}
+                    onChange={(e) =>
+                      setFormData((p) => {
+                        const billingAddress = e.target.value;
+                        return {
+                          ...p,
+                          billingAddress,
+                          shippingAddress: billingAddress,
+                        };
+                      })
+                    }
                     placeholder="Enter billing address"
                     rows={2}
                   />
@@ -936,7 +998,13 @@ export function CustomersPage() {
                     <Label>Billing City</Label>
                     <Input
                       value={formData.billingCity || ''}
-                      onChange={(e) => setFormData({ ...formData, billingCity: e.target.value })}
+                      onChange={(e) =>
+                        setFormData((p) => ({
+                          ...p,
+                          billingCity: e.target.value,
+                          shippingCity: e.target.value,
+                        }))
+                      }
                       placeholder="Bangalore"
                     />
                   </div>
@@ -944,7 +1012,13 @@ export function CustomersPage() {
                     <Label>Billing State</Label>
                     <Select
                       value={formData.billingState || ''}
-                      onValueChange={(value) => setFormData({ ...formData, billingState: value })}
+                      onValueChange={(value) =>
+                        setFormData((p) => ({
+                          ...p,
+                          billingState: value,
+                          shippingState: value,
+                        }))
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select state" />
@@ -962,53 +1036,13 @@ export function CustomersPage() {
                     <Label>Billing Postal Code</Label>
                     <Input
                       value={formData.billingPostalCode || ''}
-                      onChange={(e) => setFormData({ ...formData, billingPostalCode: e.target.value })}
-                      placeholder="560001"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Shipping Address</Label>
-                  <Textarea
-                    value={formData.shippingAddress || ''}
-                    onChange={(e) => setFormData({...formData, shippingAddress: e.target.value})}
-                    placeholder="Enter shipping address"
-                    rows={2}
-                  />
-                </div>
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <Label>Shipping City</Label>
-                    <Input
-                      value={formData.shippingCity || ''}
-                      onChange={(e) => setFormData({ ...formData, shippingCity: e.target.value })}
-                      placeholder="Bangalore"
-                    />
-                  </div>
-                  <div>
-                    <Label>Shipping State</Label>
-                    <Select
-                      value={formData.shippingState || ''}
-                      onValueChange={(value) => setFormData({ ...formData, shippingState: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select state" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INDIAN_STATES.map((state) => (
-                          <SelectItem key={state} value={state}>
-                            {state}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Shipping Postal Code</Label>
-                    <Input
-                      value={formData.shippingPostalCode || ''}
-                      onChange={(e) => setFormData({ ...formData, shippingPostalCode: e.target.value })}
+                      onChange={(e) =>
+                        setFormData((p) => ({
+                          ...p,
+                          billingPostalCode: e.target.value,
+                          shippingPostalCode: e.target.value,
+                        }))
+                      }
                       placeholder="560001"
                     />
                   </div>
@@ -1209,12 +1243,21 @@ export function CustomersPage() {
             <form onSubmit={handleUpdateCustomer} className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Customer Name *</Label>
+                  <Label>Party Name *</Label>
                   <Input
                     required
                     value={editFormData.name || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
                     placeholder="Enter name"
+                  />
+                </div>
+                <div>
+                  <Label>Owner Name *</Label>
+                  <Input
+                    required
+                    value={String(editFormData.ownerName || '')}
+                    onChange={(e) => setEditFormData({ ...editFormData, ownerName: e.target.value })}
+                    placeholder="Owner / Proprietor"
                   />
                 </div>
                 <div>
@@ -1243,31 +1286,6 @@ export function CustomersPage() {
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Opening Balance</Label>
-                  <Input
-                    value={String(editFormData.openingBalance ?? '')}
-                    onChange={(e) => setEditFormData({ ...editFormData, openingBalance: Number(e.target.value || 0) })}
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <Label>Opening Type</Label>
-                  <Select
-                    value={String(editFormData.openingBalanceType || 'dr')}
-                    onValueChange={(value) => setEditFormData({ ...editFormData, openingBalanceType: value as 'dr' | 'cr' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="DR" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dr">DR (Receivable)</SelectItem>
-                      <SelectItem value="cr">CR (Payable)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <Label>Phone</Label>
@@ -1320,6 +1338,7 @@ export function CustomersPage() {
                   ) : null}
                 </div>
               </div>
+
               <div>
                 <Label>PAN</Label>
                 <Input
@@ -1328,50 +1347,24 @@ export function CustomersPage() {
                   placeholder="AAAAA0000A"
                 />
               </div>
+
               <div>
                 <Label>Billing Address</Label>
                 <Textarea
                   value={editFormData.billingAddress || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, billingAddress: e.target.value })}
+                  onChange={(e) =>
+                    setEditFormData((p) => {
+                      const billingAddress = e.target.value;
+                      return {
+                        ...p,
+                        billingAddress,
+                        shippingAddress: billingAddress,
+                      };
+                    })
+                  }
                   placeholder="Enter billing address"
                   rows={2}
                 />
-              </div>
-
-              <div>
-                <Label>Logo</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    id="customer-logo-edit"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        const dataUrl = await fileToDataUrl(file);
-                        setEditFormData((prev) => ({ ...prev, logoDataUrl: dataUrl }));
-                        const url = await uploadLogoToCloudinary(dataUrl);
-                        setEditFormData((prev) => ({ ...prev, logoUrl: url }));
-                      } catch {
-                        toast.error('Failed to upload logo');
-                      }
-                    }}
-                  />
-                  <Button type="button" variant="outline" asChild>
-                    <label htmlFor="customer-logo-edit" style={{ cursor: 'pointer' }}>
-                      {editFormData.logoUrl || editFormData.logoDataUrl ? 'Change Logo' : 'Upload Logo'}
-                    </label>
-                  </Button>
-                  {!!(editFormData.logoUrl || editFormData.logoDataUrl) && (
-                    <img
-                      src={String(editFormData.logoUrl || editFormData.logoDataUrl)}
-                      alt="Logo"
-                      className="h-10 w-10 rounded border object-contain bg-white"
-                    />
-                  )}
-                </div>
               </div>
 
               <div className="grid md:grid-cols-3 gap-4">
@@ -1379,7 +1372,13 @@ export function CustomersPage() {
                   <Label>Billing City</Label>
                   <Input
                     value={editFormData.billingCity || ''}
-                    onChange={(e) => setEditFormData({ ...editFormData, billingCity: e.target.value })}
+                    onChange={(e) =>
+                      setEditFormData((p) => ({
+                        ...p,
+                        billingCity: e.target.value,
+                        shippingCity: e.target.value,
+                      }))
+                    }
                     placeholder="Bangalore"
                   />
                 </div>
@@ -1387,7 +1386,13 @@ export function CustomersPage() {
                   <Label>Billing State</Label>
                   <Select
                     value={editFormData.billingState || ''}
-                    onValueChange={(value) => setEditFormData({ ...editFormData, billingState: value })}
+                    onValueChange={(value) =>
+                      setEditFormData((p) => ({
+                        ...p,
+                        billingState: value,
+                        shippingState: value,
+                      }))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select state" />
@@ -1405,57 +1410,18 @@ export function CustomersPage() {
                   <Label>Billing Postal Code</Label>
                   <Input
                     value={editFormData.billingPostalCode || ''}
-                    onChange={(e) => setEditFormData({ ...editFormData, billingPostalCode: e.target.value })}
+                    onChange={(e) =>
+                      setEditFormData((p) => ({
+                        ...p,
+                        billingPostalCode: e.target.value,
+                        shippingPostalCode: e.target.value,
+                      }))
+                    }
                     placeholder="560001"
                   />
                 </div>
               </div>
 
-              <div>
-                <Label>Shipping Address</Label>
-                <Textarea
-                  value={editFormData.shippingAddress || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, shippingAddress: e.target.value })}
-                  placeholder="Enter shipping address"
-                  rows={2}
-                />
-              </div>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <Label>Shipping City</Label>
-                  <Input
-                    value={editFormData.shippingCity || ''}
-                    onChange={(e) => setEditFormData({ ...editFormData, shippingCity: e.target.value })}
-                    placeholder="Bangalore"
-                  />
-                </div>
-                <div>
-                  <Label>Shipping State</Label>
-                  <Select
-                    value={editFormData.shippingState || ''}
-                    onValueChange={(value) => setEditFormData({ ...editFormData, shippingState: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select state" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INDIAN_STATES.map((state) => (
-                        <SelectItem key={state} value={state}>
-                          {state}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Shipping Postal Code</Label>
-                  <Input
-                    value={editFormData.shippingPostalCode || ''}
-                    onChange={(e) => setEditFormData({ ...editFormData, shippingPostalCode: e.target.value })}
-                    placeholder="560001"
-                  />
-                </div>
-              </div>
               <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
                   Cancel
