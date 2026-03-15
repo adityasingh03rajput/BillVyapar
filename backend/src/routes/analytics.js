@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth, requireValidDeviceSession } from '../middleware/auth.js';
-import { requireActiveSubscriptionOrAllowReadonlyGet } from '../middleware/subscription.js';
+import { requireActiveSubscription } from '../middleware/subscription.js';
 import { requireProfile } from '../middleware/profile.js';
 import { enforceFeature } from '../middleware/subscriberEnforcement.js';
 import { Document } from '../models/Document.js';
@@ -10,7 +10,7 @@ export const analyticsRouter = Router();
 analyticsRouter.use(
   requireAuth,
   requireValidDeviceSession,
-  requireActiveSubscriptionOrAllowReadonlyGet(['/analytics']),
+  requireActiveSubscription,
   requireProfile,
   enforceFeature('allowAnalytics')
 );

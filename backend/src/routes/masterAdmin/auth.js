@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { MasterAdmin } from '../../models/MasterAdmin.js';
-import { signAccessToken } from '../../lib/jwt.js';
+import { signMasterAdminToken } from '../../lib/jwt.js';
 import { requireMasterAdmin } from '../../middleware/masterAdmin.js';
 
 export const masterAdminAuthRouter = Router();
@@ -23,9 +23,8 @@ masterAdminAuthRouter.post('/signin', async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const accessToken = signAccessToken({
+    const accessToken = signMasterAdminToken({
       sub: String(admin._id),
-      type: 'master_admin',
       role: admin.role,
     });
 

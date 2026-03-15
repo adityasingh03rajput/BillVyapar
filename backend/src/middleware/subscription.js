@@ -45,6 +45,11 @@ async function checkAccess(userId) {
       { $set: { status: 'expired' } }
     ).catch(() => {});
 
+    // Ensure Subscriber.status is 'active' when license is valid
+    if (subscriber && subscriber.status !== 'active' && subscriber.status !== 'suspended') {
+      Subscriber.updateOne({ ownerUserId: userId }, { $set: { status: 'active' } }).catch(() => {});
+    }
+
     const daysRemaining = Math.ceil((new Date(activeLicense.expiresAt) - now) / (1000 * 60 * 60 * 24));
     return {
       ok: true,
@@ -62,8 +67,7 @@ async function checkAccess(userId) {
     { $set: { status: 'expired' } }
   ).catch(() => {});
 
-  // ── 2. Trial window ────────────────────────────────────────────────────────
-  const extensionDays = Number(subscriber?.trialExtensionDays || 0);
+  // ── 2. Trial window ────────────────────────────────────────────────────────  const extensionDays = Number(subscriber?.trialExtensionDays || 0);
   const trialEnd = new Date(user.createdAt.getTime() + (TRIAL_DAYS + extensionDays) * 24 * 60 * 60 * 1000);
 
   if (now <= trialEnd) {
@@ -78,6 +82,11 @@ async function checkAccess(userId) {
   }
 
   // ── No valid access ────────────────────────────────────────────────────────
+  // Sync Subscriber.status to 'expired' so dashboard counts are accurate
+  if (subscriber && subscriber.status === 'active') {
+    Subscriber.updateOne({ ownerUserId: userId }, { $set: { status: 'expired' } }).catch(() => {});
+  }
+
   return {
     ok: false,
     code: 'LICENSE_EXPIRED',

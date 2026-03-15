@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const tenantLicenseSchema = new mongoose.Schema(
   {
-    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, unique: true, index: true },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscriber', required: true, unique: true, index: true },
     planId: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', required: true },
     licenseStartAt: { type: Date, required: true },
     licenseEndAt: { type: Date, required: true },

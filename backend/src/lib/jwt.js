@@ -1,12 +1,26 @@
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 
+// App user tokens
 export function signAccessToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
 export function verifyAccessToken(token) {
   return jwt.verify(token, process.env.JWT_SECRET);
+}
+
+// Master admin tokens — separate secret so admin JWTs can't be used on app routes and vice versa
+const MASTER_ADMIN_SECRET = process.env.MASTER_ADMIN_JWT_SECRET || process.env.JWT_SECRET + '_master_admin';
+
+export function signMasterAdminToken(payload) {
+  return jwt.sign({ ...payload, _scope: 'master_admin' }, MASTER_ADMIN_SECRET, { expiresIn: '12h' });
+}
+
+export function verifyMasterAdminToken(token) {
+  const decoded = jwt.verify(token, MASTER_ADMIN_SECRET);
+  if (decoded._scope !== 'master_admin') throw new Error('Invalid token scope');
+  return decoded;
 }
 
 export function decodeAccessToken(token) {

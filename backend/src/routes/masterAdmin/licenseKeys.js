@@ -2,6 +2,8 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { LicenseKey } from '../../models/LicenseKey.js';
 import { AuditLog } from '../../models/AuditLog.js';
+import { User } from '../../models/User.js';
+import { Subscriber } from '../../models/Subscriber.js';
 import { requireMasterAdmin } from '../../middleware/masterAdmin.js';
 import { canSendEmail, sendEmail } from '../../lib/email.js';
 
@@ -71,6 +73,9 @@ masterAdminLicenseKeysRouter.post('/', async (req, res, next) => {
     await AuditLog.create({
       actorMasterAdminId: req.masterAdminId,
       action: 'license_key_generated',
+      tenantId: await User.findOne({ email: String(assignedEmail).toLowerCase().trim() }).lean()
+        .then(u => u ? Subscriber.findOne({ ownerUserId: u._id }).lean().then(s => s?._id ?? null) : null)
+        .catch(() => null),
       after: { key, assignedEmail, durationDays },
     });
 

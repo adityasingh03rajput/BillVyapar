@@ -266,14 +266,7 @@ export function MasterAdminDashboardPage() {
             { name: 'Items',     value: stats?.platform?.totals?.items     || 0, fill: '#f59e0b' },
           ];
 
-          // Simulated monthly subscriber growth from total
-          const total = stats?.totalTenants || 0;
-          const areaData = Array.from({ length: 6 }, (_, i) => {
-            const month = new Date(); month.setMonth(month.getMonth() - (5 - i));
-            const label = month.toLocaleString('default', { month: 'short' });
-            const frac = (i + 1) / 6;
-            return { month: label, subscribers: Math.round(total * frac * (0.7 + Math.random() * 0.3)) };
-          });
+          // Simulated monthly subscriber growth from total — removed, now using real data from API
 
           const cardStyle = {
             background: 'rgba(255,255,255,0.82)',
@@ -334,11 +327,11 @@ export function MasterAdminDashboardPage() {
                   </ResponsiveContainer>
                 </div>
 
-                {/* Area — subscriber growth trend */}
+                {/* Area — real monthly signup trend */}
                 <div style={cardStyle}>
-                  <p className="text-xs font-bold mb-4" style={{ color: '#1e1b4b' }}>Subscriber Growth</p>
+                  <p className="text-xs font-bold mb-4" style={{ color: '#1e1b4b' }}>New Signups (6 months)</p>
                   <ResponsiveContainer width="100%" height={180}>
-                    <AreaChart data={areaData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <AreaChart data={stats?.signupTrend || []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="subGrad" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.25} />
@@ -347,7 +340,7 @@ export function MasterAdminDashboardPage() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: 12 }} />
                       <Area type="monotone" dataKey="subscribers" stroke="#6366f1" strokeWidth={2.5}
                         fill="url(#subGrad)" dot={{ fill: '#6366f1', r: 3, strokeWidth: 0 }} />

@@ -67,6 +67,16 @@ authRouter.post('/signup', async (req, res, next) => {
       referralCode,
     });
 
+    // Create Subscriber record immediately so trial users appear in admin panel
+    // and admin-set limits/trial extensions work from day 1
+    await Subscriber.create({
+      ownerUserId: user._id,
+      name: name || String(email).split('@')[0],
+      email: String(email).toLowerCase(),
+      phone: normalizedPhone,
+      status: 'active',
+    }).catch(() => {}); // ignore duplicate key if somehow already exists
+
     const trialEndsAt = new Date(user.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     res.json({

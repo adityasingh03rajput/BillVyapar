@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { User } from '../../models/User.js';
-import { Subscription } from '../../models/Subscription.js';
+import { LicenseKey } from '../../models/LicenseKey.js';
 import { BusinessProfile } from '../../models/BusinessProfile.js';
 import { Document } from '../../models/Document.js';
 import { Customer } from '../../models/Customer.js';
@@ -51,21 +51,33 @@ masterAdminUsersRouter.get('/', async (req, res, next) => {
     // Get stats for each user
     const usersWithStats = await Promise.all(
       users.map(async (user) => {
-        const [subscription, profileCount, documentCount, customerCount, tenant] = await Promise.all([
-          Subscription.findOne({ userId: user._id }).lean(),
+        const now = new Date();
+        const [licenseKey, profileCount, documentCount, customerCount, tenant] = await Promise.all([
+          LicenseKey.findOne({ activatedByUserId: user._id }).sort({ expiresAt: -1 }).lean(),
           BusinessProfile.countDocuments({ userId: user._id }),
           Document.countDocuments({ userId: user._id }),
           Customer.countDocuments({ userId: user._id }),
           Subscriber.findOne({ ownerUserId: user._id }).lean(),
         ]);
 
+        // Derive license status from LicenseKey (source of truth)
+        let licenseStatus = 'trial';
+        let licenseEndDate = null;
+        if (licenseKey) {
+          licenseStatus = licenseKey.status;
+          licenseEndDate = licenseKey.expiresAt;
+        }
+
         return {
           ...user,
           _id: String(user._id),
-          subscription: subscription ? {
-            plan: subscription.plan,
-            endDate: subscription.endDate,
-            active: subscription.active,
+          license: licenseKey ? {
+            key: licenseKey.key,
+            status: licenseStatus,
+            endDate: licenseEndDate,
+            daysRemaining: licenseEndDate
+              ? Math.max(0, Math.ceil((new Date(licenseEndDate) - now) / (1000 * 60 * 60 * 24)))
+              : null,
           } : null,
           stats: {
             profiles: profileCount,
@@ -99,8 +111,8 @@ masterAdminUsersRouter.get('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const [subscription, profiles, documents, customers, tenant] = await Promise.all([
-      Subscription.findOne({ userId: user._id }).lean(),
+    const [licenseKey, profiles, documents, customers, tenant] = await Promise.all([
+      LicenseKey.findOne({ activatedByUserId: user._id }).sort({ expiresAt: -1 }).lean(),
       BusinessProfile.find({ userId: user._id }).lean(),
       Document.find({ userId: user._id }).sort({ createdAt: -1 }).limit(10).lean(),
       Customer.find({ userId: user._id }).limit(10).lean(),
@@ -108,11 +120,14 @@ masterAdminUsersRouter.get('/:id', async (req, res, next) => {
     ]);
 
     res.json({
-      user: {
-        ...user,
-        _id: String(user._id),
-      },
-      subscription,
+      user: { ...user, _id: String(user._id) },
+      license: licenseKey ? {
+        key: licenseKey.key,
+        status: licenseKey.status,
+        endDate: licenseKey.expiresAt,
+        durationDays: licenseKey.durationDays,
+        activatedAt: licenseKey.activatedAt,
+      } : null,
       profiles: profiles.map(p => ({
         ...p,
         _id: String(p._id),
@@ -151,11 +166,15 @@ masterAdminUsersRouter.delete('/:id', async (req, res, next) => {
 
     const before = user.toObject();
     
-    // Mark subscription as inactive
-    await Subscription.updateOne(
-      { userId: user._id },
-      { $set: { active: false } }
+    // Revoke any active license keys so the user loses access immediately
+    await LicenseKey.updateMany(
+      { activatedByUserId: user._id, status: 'active' },
+      { $set: { status: 'revoked' } }
     );
+    // Suspend subscriber record if it exists
+    await Subscriber.updateOne({ ownerUserId: user._id }, { $set: { status: 'suspended' } });
+    // Kill all sessions
+    await Session.deleteMany({ userId: user._id });
 
     await logAudit(req.masterAdminId, 'user_deactivated', null, before, { active: false }, { userId: String(user._id) });
 

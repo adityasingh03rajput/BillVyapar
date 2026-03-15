@@ -1,4 +1,4 @@
-import { verifyAccessToken } from '../lib/jwt.js';
+import { verifyMasterAdminToken } from '../lib/jwt.js';
 import { MasterAdmin } from '../models/MasterAdmin.js';
 
 export async function requireMasterAdmin(req, res, next) {
@@ -12,7 +12,7 @@ export async function requireMasterAdmin(req, res, next) {
 
     let payload;
     try {
-      payload = verifyAccessToken(token);
+      payload = verifyMasterAdminToken(token);
     } catch {
       return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
