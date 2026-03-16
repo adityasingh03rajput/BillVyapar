@@ -153,4 +153,12 @@ const documentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Compound indexes — every list query filters on (userId, profileId)
+documentSchema.index({ userId: 1, profileId: 1, createdAt: -1 });
+documentSchema.index({ userId: 1, profileId: 1, type: 1, createdAt: -1 });
+documentSchema.index({ userId: 1, profileId: 1, paymentStatus: 1 });
+documentSchema.index({ userId: 1, profileId: 1, status: 1 });
+// For auto-reminder job
+documentSchema.index({ type: 1, paymentStatus: 1, updatedAt: -1 });
+
 export const Document = mongoose.model('Document', documentSchema);

@@ -4,6 +4,7 @@ import { requireActiveSubscription } from '../middleware/subscription.js';
 import { requireProfile } from '../middleware/profile.js';
 import { enforceFeature } from '../middleware/subscriberEnforcement.js';
 import { Document } from '../models/Document.js';
+import mongoose from 'mongoose';
 
 export const analyticsRouter = Router();
 
@@ -19,84 +20,89 @@ analyticsRouter.get('/', async (req, res, next) => {
   try {
     const { startDate: startDateRaw, endDate: endDateRaw } = req.query || {};
     const startDate = typeof startDateRaw === 'string' && startDateRaw.trim() ? startDateRaw.trim() : null;
-    const endDate = typeof endDateRaw === 'string' && endDateRaw.trim() ? endDateRaw.trim() : null;
+    const endDate   = typeof endDateRaw   === 'string' && endDateRaw.trim()   ? endDateRaw.trim()   : null;
 
-    const documents = await Document.find({ userId: req.userId, profileId: req.profileId }).sort({ createdAt: -1 });
+    const userId    = new mongoose.Types.ObjectId(req.userId);
+    const profileId = new mongoose.Types.ObjectId(req.profileId);
 
-    const withinRange = (doc) => {
-      const docDateStr = typeof doc?.date === 'string' && doc.date.trim() ? doc.date.trim() : null;
-      const docDate = docDateStr ? new Date(docDateStr) : (doc?.createdAt ? new Date(doc.createdAt) : null);
-      if (!docDate || Number.isNaN(docDate.getTime())) return false;
+    // ── Base match — always filter by user + profile ──────────────────────────
+    const baseMatch = { userId, profileId };
 
-      const start = startDate ? new Date(startDate) : null;
-      const end = endDate ? new Date(endDate) : null;
-      if (start && !Number.isNaN(start.getTime()) && docDate < start) return false;
-      if (end && !Number.isNaN(end.getTime())) {
-        const endInclusive = new Date(end);
-        endInclusive.setHours(23, 59, 59, 999);
-        if (docDate > endInclusive) return false;
-      }
-      return true;
-    };
+    // ── Date range filter on the `date` string field ──────────────────────────
+    if (startDate || endDate) {
+      baseMatch.date = {};
+      if (startDate) baseMatch.date.$gte = startDate;
+      if (endDate)   baseMatch.date.$lte = endDate;
+    }
 
-    const filteredDocuments = (startDate || endDate)
-      ? documents.filter(withinRange)
-      : documents;
+    // ── Run all aggregations in parallel ──────────────────────────────────────
+    const [summaryResult, topItemsResult, monthlyResult] = await Promise.all([
 
-    const invoices = filteredDocuments.filter(d => d.type === 'invoice');
-    const quotations = filteredDocuments.filter(d => d.type === 'quotation');
+      // 1. Summary stats (totals, counts)
+      Document.aggregate([
+        { $match: baseMatch },
+        {
+          $group: {
+            _id: null,
+            totalSales:      { $sum: { $cond: [{ $eq: ['$type', 'invoice'] }, '$grandTotal', 0] } },
+            outstanding:     { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $ne: ['$paymentStatus', 'paid'] }] }, '$grandTotal', 0] } },
+            totalInvoices:   { $sum: { $cond: [{ $eq: ['$type', 'invoice'] }, 1, 0] } },
+            totalQuotations: { $sum: { $cond: [{ $eq: ['$type', 'quotation'] }, 1, 0] } },
+            paidInvoices:    { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $eq: ['$paymentStatus', 'paid'] }] }, 1, 0] } },
+            unpaidInvoices:  { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $ne: ['$paymentStatus', 'paid'] }] }, 1, 0] } },
+          },
+        },
+      ]),
 
-    const totalSales = invoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-    const paidInvoices = invoices.filter(inv => inv.paymentStatus === 'paid');
-    const unpaidInvoices = invoices.filter(inv => inv.paymentStatus !== 'paid');
-    const outstanding = unpaidInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+      // 2. Top items by revenue (from invoice line items)
+      Document.aggregate([
+        { $match: { ...baseMatch, type: 'invoice' } },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: '$items.name',
+            quantity: { $sum: '$items.quantity' },
+            revenue:  { $sum: '$items.total' },
+            cost:     { $sum: { $multiply: ['$items.purchaseCost', '$items.quantity'] } },
+          },
+        },
+        { $addFields: { profit: { $subtract: ['$revenue', '$cost'] } } },
+        { $sort: { revenue: -1 } },
+        { $limit: 200 },
+        { $project: { _id: 0, name: '$_id', quantity: 1, revenue: 1, cost: 1, profit: 1 } },
+      ]),
 
-    const itemSales = {};
-    invoices.forEach(inv => {
-      (inv.items || []).forEach(item => {
-        if (!itemSales[item.name]) {
-          itemSales[item.name] = { name: item.name, quantity: 0, revenue: 0, cost: 0, profit: 0 };
-        }
-        const qty = Number(item.quantity || 0);
-        const revenue = Number(item.total || 0);
-        const unitCost = Number(item.purchaseCost || 0);
+      // 3. Monthly revenue
+      Document.aggregate([
+        { $match: { ...baseMatch, type: 'invoice', date: { $exists: true, $ne: null } } },
+        {
+          $group: {
+            _id: { $substr: ['$date', 0, 7] }, // "YYYY-MM"
+            revenue: { $sum: '$grandTotal' },
+          },
+        },
+        { $sort: { _id: 1 } },
+        { $project: { _id: 0, month: '$_id', revenue: 1 } },
+      ]),
+    ]);
 
-        itemSales[item.name].quantity += qty;
-        itemSales[item.name].revenue += revenue;
-        itemSales[item.name].cost += unitCost * qty;
-      });
-    });
+    const s = summaryResult[0] || {};
+    const monthlyRevenue = Object.fromEntries(monthlyResult.map(r => [r.month, r.revenue]));
 
-    Object.values(itemSales).forEach((row) => {
-      row.profit = (row.revenue || 0) - (row.cost || 0);
-    });
-
-    const topItems = Object.values(itemSales)
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 200);
-
-    const monthlyRevenue = {};
-    invoices.forEach(inv => {
-      if (inv.date) {
-        const month = inv.date.substring(0, 7);
-        monthlyRevenue[month] = (monthlyRevenue[month] || 0) + (inv.grandTotal || 0);
-      }
-    });
-
+    res.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120');
     res.json({
-      dateRange: {
-        startDate,
-        endDate,
-      },
-      totalSales,
-      outstanding,
-      totalInvoices: invoices.length,
-      totalQuotations: quotations.length,
-      paidInvoices: paidInvoices.length,
-      unpaidInvoices: unpaidInvoices.length,
-      topItems,
+      dateRange: { startDate, endDate },
+      totalSales:      s.totalSales      ?? 0,
+      outstanding:     s.outstanding     ?? 0,
+      totalInvoices:   s.totalInvoices   ?? 0,
+      totalQuotations: s.totalQuotations ?? 0,
+      paidInvoices:    s.paidInvoices    ?? 0,
+      unpaidInvoices:  s.unpaidInvoices  ?? 0,
+      topItems:        topItemsResult,
       monthlyRevenue,
-      conversionRate: quotations.length > 0 ? ((invoices.length / quotations.length) * 100).toFixed(1) : 0,
+      conversionRate: s.totalQuotations > 0
+        ? ((s.totalInvoices / s.totalQuotations) * 100).toFixed(1)
+        : 0,
     });
   } catch (err) {
     next(err);

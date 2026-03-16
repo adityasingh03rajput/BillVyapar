@@ -1,113 +1,95 @@
+import { Suspense, lazy } from 'react';
+import React from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { OfflineBanner } from './components/OfflineBanner';
+import { useIsNative } from './hooks/useIsNative';
 import { AuthPage } from './pages/AuthPage';
-import { WelcomePageWrapper } from './pages/WelcomePageWrapper';
-import { ProfilesPageWrapper } from './pages/ProfilesPageWrapper';
-import { DashboardPageWrapper } from './pages/DashboardPageWrapper';
-import { DocumentsPageWrapper } from './pages/DocumentsPageWrapper';
-import { CreateDocumentPageWrapper } from './pages/CreateDocumentPageWrapper';
-import { CustomersPageWrapper } from './pages/CustomersPageWrapper';
-import { SuppliersPageWrapper } from './pages/SuppliersPageWrapper';
-import { ItemsPageWrapper } from './pages/ItemsPageWrapper';
-import { AnalyticsPageWrapper } from './pages/AnalyticsPageWrapper';
-import { SubscriptionPageWrapper } from './pages/SubscriptionPageWrapper';
-import { GstReportsPage } from './pages/GstReportsPage';
-import { PartyLedgerPageWrapper } from './pages/PartyLedgerPageWrapper';
-import { BankAccountsPageWrapper } from './pages/BankAccountsPageWrapper';
-import { PosPageWrapper } from './pages/PosPageWrapper';
-import { ExtraExpensesPageWrapper } from './pages/ExtraExpensesPageWrapper';
-import { VyaparKhataPageWrapper } from './pages/VyaparKhataPageWrapper';
-import { VyaparKhataPageNewWrapper } from './pages/VyaparKhataPageNewWrapper';
+
+// Lazy-load all heavy pages — they'll be split into separate chunks
+const WelcomePageWrapper        = lazy(() => import('./pages/WelcomePageWrapper').then(m => ({ default: m.WelcomePageWrapper })));
+const ProfilesPageWrapper       = lazy(() => import('./pages/ProfilesPageWrapper').then(m => ({ default: m.ProfilesPageWrapper })));
+const DashboardPageWrapper      = lazy(() => import('./pages/DashboardPageWrapper').then(m => ({ default: m.DashboardPageWrapper })));
+const DocumentsPageWrapper      = lazy(() => import('./pages/DocumentsPageWrapper').then(m => ({ default: m.DocumentsPageWrapper })));
+const CreateDocumentPageWrapper = lazy(() => import('./pages/CreateDocumentPageWrapper').then(m => ({ default: m.CreateDocumentPageWrapper })));
+const CustomersPageWrapper      = lazy(() => import('./pages/CustomersPageWrapper').then(m => ({ default: m.CustomersPageWrapper })));
+const SuppliersPageWrapper      = lazy(() => import('./pages/SuppliersPageWrapper').then(m => ({ default: m.SuppliersPageWrapper })));
+const ItemsPageWrapper          = lazy(() => import('./pages/ItemsPageWrapper').then(m => ({ default: m.ItemsPageWrapper })));
+const AnalyticsPageWrapper      = lazy(() => import('./pages/AnalyticsPageWrapper').then(m => ({ default: m.AnalyticsPageWrapper })));
+const SubscriptionPageWrapper   = lazy(() => import('./pages/SubscriptionPageWrapper').then(m => ({ default: m.SubscriptionPageWrapper })));
+const GstReportsPage            = lazy(() => import('./pages/GstReportsPage').then(m => ({ default: m.GstReportsPage })));
+const PartyLedgerPageWrapper    = lazy(() => import('./pages/PartyLedgerPageWrapper').then(m => ({ default: m.PartyLedgerPageWrapper })));
+const BankAccountsPageWrapper   = lazy(() => import('./pages/BankAccountsPageWrapper').then(m => ({ default: m.BankAccountsPageWrapper })));
+const PosPageWrapper            = lazy(() => import('./pages/PosPageWrapper').then(m => ({ default: m.PosPageWrapper })));
+const ExtraExpensesPageWrapper  = lazy(() => import('./pages/ExtraExpensesPageWrapper').then(m => ({ default: m.ExtraExpensesPageWrapper })));
+const VyaparKhataPageWrapper    = lazy(() => import('./pages/VyaparKhataPageWrapper').then(m => ({ default: m.VyaparKhataPageWrapper })));
+const VyaparKhataPageNewWrapper = lazy(() => import('./pages/VyaparKhataPageNewWrapper').then(m => ({ default: m.VyaparKhataPageNewWrapper })));
+
+/** Minimal skeleton shown while a lazy page chunk is loading */
+function PageSkeleton() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+    </div>
+  );
+}
+
+function wrap(Component: React.ComponentType) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageSkeleton />}>
+        <Component />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
 
 const router = createBrowserRouter([
-  {
-    path: "/",
-    Component: AuthPage,
-  },
-  {
-    path: "/profiles",
-    Component: ProfilesPageWrapper,
-  },
-  {
-    path: "/welcome",
-    Component: WelcomePageWrapper,
-  },
-  {
-    path: "/dashboard",
-    Component: DashboardPageWrapper,
-  },
-  {
-    path: "/documents",
-    Component: DocumentsPageWrapper,
-  },
-  {
-    path: "/documents/create",
-    Component: CreateDocumentPageWrapper,
-  },
-  {
-    path: "/documents/edit/:id",
-    Component: CreateDocumentPageWrapper,
-  },
-  {
-    path: "/customers",
-    Component: CustomersPageWrapper,
-  },
-  {
-    path: "/suppliers",
-    Component: SuppliersPageWrapper,
-  },
-  {
-    path: "/items",
-    Component: ItemsPageWrapper,
-  },
-  {
-    path: "/analytics",
-    Component: AnalyticsPageWrapper,
-  },
-  {
-    path: "/reports/gst",
-    Component: GstReportsPage,
-  },
-  {
-    path: "/ledger",
-    Component: PartyLedgerPageWrapper,
-  },
-  {
-    path: "/subscription",
-    Component: SubscriptionPageWrapper,
-  },
-  {
-    path: "/bank-accounts",
-    Component: BankAccountsPageWrapper,
-  },
-  {
-    path: "/pos",
-    Component: PosPageWrapper,
-  },
-  {
-    path: "/extra-expenses",
-    Component: ExtraExpensesPageWrapper,
-  },
-  {
-    path: "/vyapar-khata",
-    Component: VyaparKhataPageWrapper,
-  },
-  {
-    path: "/vyapar-khata-new",
-    Component: VyaparKhataPageNewWrapper,
-  },
+  { path: "/",                    element: <AuthPage /> },
+  { path: "/profiles",            element: wrap(ProfilesPageWrapper) },
+  { path: "/welcome",             element: wrap(WelcomePageWrapper) },
+  { path: "/dashboard",           element: wrap(DashboardPageWrapper) },
+  { path: "/documents",           element: wrap(DocumentsPageWrapper) },
+  { path: "/documents/create",    element: wrap(CreateDocumentPageWrapper) },
+  { path: "/documents/edit/:id",  element: wrap(CreateDocumentPageWrapper) },
+  { path: "/customers",           element: wrap(CustomersPageWrapper) },
+  { path: "/suppliers",           element: wrap(SuppliersPageWrapper) },
+  { path: "/items",               element: wrap(ItemsPageWrapper) },
+  { path: "/analytics",           element: wrap(AnalyticsPageWrapper) },
+  { path: "/reports/gst",         element: wrap(GstReportsPage) },
+  { path: "/ledger",              element: wrap(PartyLedgerPageWrapper) },
+  { path: "/subscription",        element: wrap(SubscriptionPageWrapper) },
+  { path: "/bank-accounts",       element: wrap(BankAccountsPageWrapper) },
+  { path: "/pos",                 element: wrap(PosPageWrapper) },
+  { path: "/extra-expenses",      element: wrap(ExtraExpensesPageWrapper) },
+  { path: "/vyapar-khata",        element: wrap(VyaparKhataPageWrapper) },
+  { path: "/vyapar-khata-new",    element: wrap(VyaparKhataPageNewWrapper) },
 ]);
+
+function AppInner() {
+  const isNative = useIsNative();
+  return (
+    <>
+      {/* Only show the offline banner on web — mobile has its own indicator in MobileLayout */}
+      {!isNative && <OfflineBanner />}
+      <RouterProvider router={router} />
+      <Toaster />
+    </>
+  );
+}
 
 function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <RouterProvider router={router} />
-        <Toaster />
-      </ThemeProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <AppInner />
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

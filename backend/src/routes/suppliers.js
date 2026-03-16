@@ -31,11 +31,16 @@ suppliersRouter.post('/', enforceLimit('maxSuppliers', (req) => Supplier.countDo
 
 suppliersRouter.get('/', async (req, res, next) => {
   try {
-    const suppliers = await Supplier.find({ userId: req.userId, profileId: req.profileId }).sort({ createdAt: 1 });
+    const suppliers = await Supplier.find(
+      { userId: req.userId, profileId: req.profileId },
+      '-logoDataUrl'
+    ).sort({ createdAt: 1 }).lean();
+
+    res.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     res.json(
       suppliers.map(s => ({
         id: String(s._id),
-        ...s.toObject(),
+        ...s,
         _id: undefined,
         userId: undefined,
         createdAt: s.createdAt?.toISOString?.() ?? s.createdAt,

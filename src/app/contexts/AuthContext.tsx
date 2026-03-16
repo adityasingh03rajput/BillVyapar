@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { API_URL } from '../config/api';
+import { clearApiCache } from '../hooks/useApiCache';
 
 interface User {
   id: string;
@@ -123,6 +124,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSubscriptionExpired(false);
     localStorage.setItem('accessToken', data.session.access_token);
     localStorage.setItem('user', JSON.stringify(userData));
+
+    // Prefetch the dashboard chunk in the background so it's ready on first navigation
+    import('../pages/DashboardPageWrapper').catch(() => {});
   };
 
   const signUp = async (email: string, password: string, name: string, phone: string) => {
@@ -161,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setUser(null);
     setAccessToken(null);
+    clearApiCache();
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     localStorage.removeItem('currentProfile');

@@ -74,12 +74,12 @@ export function CustomersPage() {
   const profileId = currentProfile?.id;
 
   const customersCacheKey = profileId ? `cache:customers:${profileId}` : null;
-  const CUSTOMERS_CACHE_TTL_MS = 60 * 1000;
+  const CUSTOMERS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
 
   const readCustomersCache = () => {
     if (!customersCacheKey) return null;
     try {
-      const raw = sessionStorage.getItem(customersCacheKey);
+      const raw = localStorage.getItem(customersCacheKey);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       const ts = Number(parsed?.ts || 0);
@@ -94,7 +94,7 @@ export function CustomersPage() {
   const writeCustomersCache = (data: Customer[]) => {
     if (!customersCacheKey) return;
     try {
-      sessionStorage.setItem(customersCacheKey, JSON.stringify({ ts: Date.now(), data }));
+      localStorage.setItem(customersCacheKey, JSON.stringify({ ts: Date.now(), data }));
     } catch {
       // ignore
     }
@@ -169,7 +169,7 @@ export function CustomersPage() {
   const clearCustomersCache = () => {
     if (!customersCacheKey) return;
     try {
-      sessionStorage.removeItem(customersCacheKey);
+      localStorage.removeItem(customersCacheKey);
     } catch {
       // ignore
     }
@@ -241,14 +241,14 @@ export function CustomersPage() {
 
     if (cached?.data?.length) {
       setCustomers(cached.data);
-      if (isFresh) {
-        setLoading(false);
-        return;
-      }
+      setLoading(false);
+      if (isFresh) return;
+      // Stale — revalidate in background without spinner
+    } else {
+      setLoading(true);
     }
 
     try {
-      setLoading(true);
       const response = await fetch(`${apiUrl}/customers`, {
         headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
       });

@@ -67,12 +67,12 @@ export function SuppliersPage() {
   const profileId = currentProfile?.id;
 
   const suppliersCacheKey = profileId ? `cache:suppliers:${profileId}` : null;
-  const SUPPLIERS_CACHE_TTL_MS = 60 * 1000;
+  const SUPPLIERS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
 
   const readSuppliersCache = () => {
     if (!suppliersCacheKey) return null;
     try {
-      const raw = sessionStorage.getItem(suppliersCacheKey);
+      const raw = localStorage.getItem(suppliersCacheKey);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       const ts = Number(parsed?.ts || 0);
@@ -87,7 +87,7 @@ export function SuppliersPage() {
   const writeSuppliersCache = (data: Supplier[]) => {
     if (!suppliersCacheKey) return;
     try {
-      sessionStorage.setItem(suppliersCacheKey, JSON.stringify({ ts: Date.now(), data }));
+      localStorage.setItem(suppliersCacheKey, JSON.stringify({ ts: Date.now(), data }));
     } catch {
       // ignore
     }
@@ -154,7 +154,7 @@ export function SuppliersPage() {
   const clearSuppliersCache = () => {
     if (!suppliersCacheKey) return;
     try {
-      sessionStorage.removeItem(suppliersCacheKey);
+      localStorage.removeItem(suppliersCacheKey);
     } catch {
       // ignore
     }
@@ -226,14 +226,14 @@ export function SuppliersPage() {
 
     if (cached?.data?.length) {
       setSuppliers(cached.data);
-      if (isFresh) {
-        setLoading(false);
-        return;
-      }
+      setLoading(false);
+      if (isFresh) return;
+      // Stale — revalidate in background without spinner
+    } else {
+      setLoading(true);
     }
 
     try {
-      setLoading(true);
       const response = await fetch(`${apiUrl}/suppliers`, {
         headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
       });

@@ -29,14 +29,45 @@ export function AuthPage() {
 
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [checkingBackend, setCheckingBackend] = useState(false);
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      navigate('/welcome');
+    if (authLoading) return; // wait for auth to initialize
+    if (!user) return;       // not logged in — show login form
+
+    // User is logged in — decide where to send them
+    try {
+      const raw = localStorage.getItem('currentProfile');
+      if (raw) {
+        const profile = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (profile?.id) {
+          // Has a selected profile — go straight to dashboard
+          navigate('/dashboard', { replace: true });
+          return;
+        }
+      }
+    } catch {
+      // ignore parse errors
     }
-  }, [user, navigate]);
+    // No profile selected — go to welcome/profiles
+    navigate('/welcome', { replace: true });
+  }, [user, authLoading, navigate]);
+
+  // While auth is initializing, show a blank splash (prevents login form flash)
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-green-50">
+        <div className="flex flex-col items-center gap-3">
+          <FileText className="h-12 w-12 text-blue-600 animate-pulse" />
+          <span className="text-lg font-semibold text-blue-700">BillVyapar</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Already logged in — don't render the form, navigation effect will redirect
+  if (user) return null;
 
   useEffect(() => {
     let cancelled = false;
@@ -125,20 +156,49 @@ export function AuthPage() {
           if (v.startsWith('+')) return v;
           const digits = v.replace(/\D/g, '');
           if (!digits) return v;
-          // Default India if user enters 10-digit local number
           if (digits.length === 10) return `+91${digits}`;
-          // If user typed country code without +
           if (digits.length >= 8 && digits.length <= 15) return `+${digits}`;
           return v;
         };
 
         await signUp(email, password, name, normalizePhone(phone));
         toast.success('Account created successfully!');
+        // New user — go to welcome to set up first profile
+        navigate('/welcome', { replace: true });
+        return;
       } else {
         await signIn(email, password);
         toast.success('Signed in successfully!');
       }
-      navigate('/welcome');
+
+      // After sign-in: check if a profile is already selected
+      try {
+        const raw = localStorage.getItem('currentProfile');
+        if (raw) {
+          const profile = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (profile?.id) {
+            navigate('/dashboard', { replace: true });
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+
+      // No profile — try to auto-select the first one from the API
+      try {
+        const tok = localStorage.getItem('accessToken');
+        const did = localStorage.getItem('deviceId') || '';
+        const res = await fetch(`${API_URL}/profiles`, {
+          headers: { Authorization: `Bearer ${tok}`, 'X-Device-ID': did },
+        });
+        const profiles = await res.json();
+        if (Array.isArray(profiles) && profiles.length > 0) {
+          localStorage.setItem('currentProfile', JSON.stringify(profiles[0]));
+          navigate('/dashboard', { replace: true });
+          return;
+        }
+      } catch { /* ignore */ }
+
+      navigate('/welcome', { replace: true });
     } catch (error: any) {
       if (error?.code === 'ALREADY_LOGGED_IN_ANOTHER_DEVICE') {
         toast.error('Already opened on another device. Reset password to continue.');

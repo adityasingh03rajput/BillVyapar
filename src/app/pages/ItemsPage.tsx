@@ -53,12 +53,12 @@ export function ItemsPage() {
   const profileId = currentProfile?.id;
 
   const itemsCacheKey = profileId ? `cache:items:${profileId}` : null;
-  const ITEMS_CACHE_TTL_MS = 60 * 1000;
+  const ITEMS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
 
   const readItemsCache = () => {
     if (!itemsCacheKey) return null;
     try {
-      const raw = sessionStorage.getItem(itemsCacheKey);
+      const raw = localStorage.getItem(itemsCacheKey);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       const ts = Number(parsed?.ts || 0);
@@ -73,7 +73,7 @@ export function ItemsPage() {
   const writeItemsCache = (data: Item[]) => {
     if (!itemsCacheKey) return;
     try {
-      sessionStorage.setItem(itemsCacheKey, JSON.stringify({ ts: Date.now(), data }));
+      localStorage.setItem(itemsCacheKey, JSON.stringify({ ts: Date.now(), data }));
     } catch {
       // ignore
     }
@@ -106,14 +106,14 @@ export function ItemsPage() {
 
     if (cached?.data?.length) {
       setItems(cached.data);
-      if (isFresh) {
-        setLoading(false);
-        return;
-      }
+      setLoading(false);
+      if (isFresh) return;
+      // Stale — revalidate in background without spinner
+    } else {
+      setLoading(true);
     }
 
     try {
-      setLoading(true);
       const response = await fetch(`${apiUrl}/items`, {
         headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
       });

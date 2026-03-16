@@ -35,6 +35,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useIsNative } from '../hooks/useIsNative';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
@@ -56,6 +57,7 @@ export function DocumentsPage() {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const { accessToken, deviceId } = useAuth();
+  const isNative = useIsNative();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -264,12 +266,12 @@ export function DocumentsPage() {
   const profileId = currentProfile?.id;
 
   const docsCacheKey = profileId ? `cache:documents:${profileId}` : null;
-  const DOCS_CACHE_TTL_MS = 60 * 1000;
+  const DOCS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
 
   const readDocsCache = () => {
     if (!docsCacheKey) return null;
     try {
-      const raw = sessionStorage.getItem(docsCacheKey);
+      const raw = localStorage.getItem(docsCacheKey);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       const ts = Number(parsed?.ts || 0);
@@ -284,7 +286,7 @@ export function DocumentsPage() {
   const writeDocsCache = (data: any[]) => {
     if (!docsCacheKey) return;
     try {
-      sessionStorage.setItem(docsCacheKey, JSON.stringify({ ts: Date.now(), data }));
+      localStorage.setItem(docsCacheKey, JSON.stringify({ ts: Date.now(), data }));
     } catch {
       // ignore
     }
@@ -293,7 +295,7 @@ export function DocumentsPage() {
   const clearDocsCache = () => {
     if (!docsCacheKey) return;
     try {
-      sessionStorage.removeItem(docsCacheKey);
+      localStorage.removeItem(docsCacheKey);
     } catch {
       // ignore
     }
@@ -406,14 +408,14 @@ export function DocumentsPage() {
     if (cached?.data?.length) {
       setDocuments(cached.data);
       filterDocuments(cached.data);
-      // If cache is fresh, skip network fetch
-      if (isFresh) {
-        setLoading(false);
-        return;
-      }
+      setLoading(false);
+      // If cache is fresh, skip network fetch entirely
+      if (isFresh) return;
+      // Stale — revalidate in background without showing spinner
+    } else {
+      setLoading(true);
     }
 
-    setLoading(true);
     try {
       const response = await fetch(`${apiUrl}/documents`, {
         headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
@@ -848,6 +850,307 @@ export function DocumentsPage() {
       <AppLayout>
         <div className="flex items-center justify-center h-full">
           <TraceLoader label="Loading documents..." />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // ── Shared dialogs (used by both mobile and desktop) ──────────────────────
+  const SharedDialogs = () => (
+    <>
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Delete Document</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              This will permanently delete
+              <span className="font-medium text-foreground"> {deleteDoc?.invoiceNo || deleteDoc?.documentNumber || 'this document'}</span>.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>Cancel</Button>
+              <Button type="button" variant="destructive" onClick={confirmDelete} disabled={deleteLoading}>
+                {deleteLoading ? 'Deleting…' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
+  // ── Mobile document card ──────────────────────────────────────────────────
+  const MobileDocCard = ({ doc }: { doc: any }) => (
+    <div className="bg-white rounded-2xl shadow-sm mx-4 mb-3 overflow-hidden">
+      <div className="p-4">
+        {/* Row 1: doc number + badges */}
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className="text-base font-bold text-gray-900">
+            {doc.invoiceNo || doc.documentNumber}
+          </span>
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getTypeColor(doc.type)}`}>
+            {getTypeLabel(doc.type)}
+          </span>
+          {doc.status === 'draft' && (
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Draft</span>
+          )}
+          {doc.paymentStatus === 'paid' && (
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-green-600">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Paid
+            </span>
+          )}
+          {(doc.paymentStatus === 'unpaid' || doc.paymentStatus === 'pending') && (
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-orange-500">
+              <Clock className="h-3.5 w-3.5" /> Unpaid
+            </span>
+          )}
+          {doc.paymentStatus === 'partial' && (
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-blue-500">
+              <Clock className="h-3.5 w-3.5" /> Partial
+            </span>
+          )}
+        </div>
+
+        {/* Row 2: details */}
+        <div className="text-sm text-gray-500 space-y-0.5 mb-3">
+          <p>Customer: <span className="text-gray-700">{doc.customerName || 'N/A'}</span></p>
+          {doc.date && <p>Date: <span className="text-gray-700">{formatDate(doc.date)}</span></p>}
+          <p>Amount: <span className="font-semibold text-gray-900">{formatCurrency(doc.grandTotal || 0)}</span></p>
+        </div>
+
+        {/* Row 3: actions */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(`/documents/edit/${doc.id}`)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 active:scale-95 transition-transform"
+          >
+            <FileEdit className="h-4 w-4" />
+            Edit
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-center h-9 w-9 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 active:scale-95 transition-transform"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => openPaymentDialog(doc)}>
+                <CheckCircle2 className="h-4 w-4 mr-2" /> Add Payment
+              </DropdownMenuItem>
+              {(doc.type === 'invoice' || doc.type === 'billing') && doc.paymentStatus !== 'paid' && doc.status !== 'draft' && (
+                <DropdownMenuItem onClick={() => openReminderDialog(doc)}>
+                  <Repeat className="h-4 w-4 mr-2" /> Send Reminder
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => openPdfDialog(doc.id, 'preview')}>
+                <Download className="h-4 w-4 mr-2" /> Preview PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openPdfDialog(doc.id, 'download')}>
+                <Download className="h-4 w-4 mr-2" /> Download PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDuplicate(doc.id)}>
+                <Copy className="h-4 w-4 mr-2" /> Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openDeleteDialog(doc)} className="text-destructive focus:text-destructive">
+                <Trash2 className="h-4 w-4 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Mobile layout ─────────────────────────────────────────────────────────
+  if (isNative) {
+    return (
+      <AppLayout>
+        <SharedDialogs />
+        {/* PDF dialog */}
+        <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{pdfDialogMode === 'preview' ? 'Preview PDF' : 'Download PDF'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Template</Label>
+                <RadioGroup value={pdfTemplateId} onValueChange={(v) => setPdfTemplateId(v as any)} className="flex flex-wrap gap-3 mt-2">
+                  {PDF_TEMPLATES.map((t) => (
+                    <div key={t.id} className="flex items-center gap-2">
+                      <RadioGroupItem value={t.id} id={`tpl-${t.id}`} />
+                      <Label htmlFor={`tpl-${t.id}`}>{t.label}</Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+              {pdfLoading && <div className="flex justify-center py-8"><TraceLoader label="Generating PDF..." /></div>}
+              {pdfDoc && (
+                <div ref={pdfRef} className="border rounded-lg overflow-hidden">
+                  <PdfRenderer doc={pdfDoc} templateId={pdfTemplateId} profile={{
+                    id: currentProfile?.id,
+                    businessName: currentProfile?.businessName, ownerName: currentProfile?.ownerName,
+                    gstin: currentProfile?.gstin, pan: currentProfile?.pan, email: currentProfile?.email,
+                    phone: currentProfile?.phone, billingAddress: currentProfile?.billingAddress,
+                    shippingAddress: currentProfile?.shippingAddress, bankName: currentProfile?.bankName,
+                    accountNumber: currentProfile?.accountNumber, ifscCode: currentProfile?.ifscCode, upiId: currentProfile?.upiId,
+                  }} />
+                </div>
+              )}
+              <div className="flex gap-2 justify-end">
+                {pdfDialogMode === 'preview' ? (
+                  <Button onClick={handlePreviewPdf} disabled={pdfLoading || !pdfDoc}>Preview in new tab</Button>
+                ) : (
+                  <Button onClick={handleExportPdf} disabled={pdfLoading || !pdfDoc}>Download PDF</Button>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {/* Payment dialog */}
+        <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Add Payment</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div><Label>Amount</Label><Input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} /></div>
+              <div><Label>Method</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger>
+                  <SelectContent>
+                    {['Cash','UPI','Bank Transfer','Cheque','Card','Other'].map(m => <SelectItem key={m} value={m.toLowerCase().replace(' ','_')}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Reference</Label><Input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Optional" /></div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+                <Button onClick={savePayment} disabled={paymentLoading}>{paymentLoading ? 'Saving…' : 'Save Payment'}</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {/* Reminder dialog */}
+        <Dialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Send Reminder</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div><Label>Mobile</Label><Input value={reminderTo} onChange={(e) => setReminderTo(e.target.value)} /></div>
+              <div><Label>Message</Label><Textarea value={reminderMessage} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setReminderMessage(e.target.value)} rows={4} /></div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={handleCopyReminder}>Copy</Button>
+                <Button onClick={handleSendSmsReminder} disabled={reminderSending}>{reminderSending ? 'Sending…' : 'Send SMS'}</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Mobile page content ── */}
+        <div className="pt-4 pb-4">
+          {/* Page header */}
+          <div className="px-4 mb-4">
+            <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Manage all your business documents</p>
+          </div>
+
+          {/* Green CTA */}
+          <div className="px-4 mb-4">
+            <button
+              type="button"
+              onClick={() => navigate('/documents/create')}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-green-500 active:bg-green-600 text-white font-semibold text-base shadow-sm active:scale-[0.98] transition-all"
+            >
+              <Plus className="h-5 w-5" strokeWidth={2.5} />
+              Create Document
+            </button>
+          </div>
+
+          {/* Filters card */}
+          <div className="mx-4 mb-4 bg-white rounded-2xl shadow-sm p-4 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search documents..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white transition-colors"
+              />
+            </div>
+            <input
+              type="text"
+              placeholder="Filter by party name..."
+              value={partyFilter}
+              onChange={(e) => setPartyFilter(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white transition-colors"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="rounded-xl border-gray-200 bg-gray-50 text-sm">
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="quotation">Quotation</SelectItem>
+                  <SelectItem value="order">Order</SelectItem>
+                  <SelectItem value="proforma">Proforma</SelectItem>
+                  <SelectItem value="invoice">Invoice</SelectItem>
+                  <SelectItem value="challan">Challan</SelectItem>
+                  <SelectItem value="purchase">Purchase</SelectItem>
+                  <SelectItem value="invoice_cancellation">Sale Return</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="rounded-xl border-gray-200 bg-gray-50 text-sm">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Party outstanding summary */}
+          {partyFilter.trim() && (partySalesOutstanding > 0 || partyPurchasePayable > 0) && (
+            <div className="mx-4 mb-4 bg-white rounded-2xl shadow-sm p-4 flex justify-between items-center">
+              <div>
+                <p className="text-xs text-gray-500">Party</p>
+                <p className="font-semibold text-gray-900">{partyFilter.trim()}</p>
+              </div>
+              {partySalesOutstanding > 0 && (
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">Outstanding</p>
+                  <p className="font-bold text-orange-600">{formatCurrency(partySalesOutstanding)}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Document list */}
+          {filteredDocs.length === 0 ? (
+            <div className="mx-4 bg-white rounded-2xl shadow-sm p-8 text-center">
+              <FileX className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <p className="font-semibold text-gray-700">
+                {documents.length === 0 ? 'No documents yet' : 'No matching documents'}
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                {documents.length === 0 ? 'Tap Create Document to get started' : 'Try adjusting your filters'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {filteredDocs.map((doc) => <MobileDocCard key={doc.id} doc={doc} />)}
+              <p className="text-center text-xs text-gray-400 mt-2 mb-2">
+                {filteredDocs.length} of {documents.length} documents
+              </p>
+            </>
+          )}
         </div>
       </AppLayout>
     );

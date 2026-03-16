@@ -31,4 +31,7 @@ const supplierSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+supplierSchema.index({ userId: 1, profileId: 1, createdAt: 1 });
+supplierSchema.index({ userId: 1, profileId: 1, name: 1 });
+
 export const Supplier = mongoose.model('Supplier', supplierSchema);

@@ -20,4 +20,8 @@ const itemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Compound index — all queries filter on (userId, profileId)
+itemSchema.index({ userId: 1, profileId: 1, createdAt: 1 });
+itemSchema.index({ userId: 1, profileId: 1, name: 1 });
+
 export const Item = mongoose.model('Item', itemSchema);

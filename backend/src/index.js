@@ -1,14 +1,20 @@
+import compression from 'compression';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
-// Load .env from backend directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+// Patch all async route errors to be forwarded to Express error handler
+import 'express-async-errors';
+
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import morgan from 'morgan';
 import mongoose from 'mongoose';
 import fs from 'fs';
 
@@ -32,8 +38,24 @@ import twilio from 'twilio';
 import { Document } from './models/Document.js';
 import { BusinessProfile } from './models/BusinessProfile.js';
 
+// ── Validate required env vars early ─────────────────────────────────────────
+const mongoUri = process.env.MONGODB_URI;
+if (!mongoUri) throw new Error('MONGODB_URI is required');
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required');
+
 const app = express();
 
+// ── Compression ───────────────────────────────────────────────────────────────
+// Gzip all responses > 1KB — cuts payload size by ~70% on JSON lists
+app.use(compression({ threshold: 1024 }));
+
+// ── Security headers ──────────────────────────────────────────────────────────
+app.use(helmet({
+  crossOriginEmbedderPolicy: false, // needed for Capacitor WebView
+  contentSecurityPolicy: false,     // managed by frontend
+}));
+
+// ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
   : [];
@@ -41,35 +63,65 @@ const allowedOrigins = process.env.CORS_ORIGIN
 app.use(cors({
   origin(origin, cb) {
     if (!origin) return cb(null, true);
-
-    // When running scripts from file:// (or certain embedded webviews), browsers send Origin: null
     if (origin === 'null') return cb(null, true);
-
-    // Allow Capacitor apps (capacitor://localhost, http://localhost without port)
     if (origin === 'capacitor://localhost' || origin === 'http://localhost' || origin === 'https://localhost') {
       return cb(null, true);
     }
-
     if (allowedOrigins.includes(origin)) return cb(null, true);
-
-    // Allow Vite/localhost dev ports by default
     if (/^https?:\/\/localhost:\d+$/.test(origin)) return cb(null, true);
     if (/^https?:\/\/127\.0\.0\.1:\d+$/.test(origin)) return cb(null, true);
-    
-    // Allow any local network IP for development
     if (/^https?:\/\/192\.168\.\d+\.\d+:\d+$/.test(origin)) return cb(null, true);
     if (/^https?:\/\/10\.\d+\.\d+\.\d+:\d+$/.test(origin)) return cb(null, true);
-
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: false,
 }));
+
+// ── Request logging ───────────────────────────────────────────────────────────
+// Skip health checks to keep logs clean
+app.use(morgan('combined', {
+  skip: (req) => req.path === '/health',
+}));
+
+// ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// Strict limit on auth endpoints to prevent brute-force
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  skip: (req) => req.path === '/verify-session', // don't throttle session checks
 });
 
+// General API limiter — generous but prevents abuse
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+app.use('/auth', authLimiter);
+app.use(apiLimiter);
+
+// ── Health check ──────────────────────────────────────────────────────────────
+app.get('/health', (_req, res) => {
+  const dbState = mongoose.connection.readyState;
+  // 1 = connected, 2 = connecting
+  const dbOk = dbState === 1 || dbState === 2;
+  res.status(dbOk ? 200 : 503).json({
+    status: dbOk ? 'ok' : 'degraded',
+    db: ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState] ?? 'unknown',
+    uptime: Math.floor(process.uptime()),
+  });
+});
+
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/auth', authRouter);
 app.use('/profiles', profilesRouter);
 app.use('/documents', documentsRouter);
@@ -87,53 +139,77 @@ app.use('/vyapar-khata', vyaparKhataRouter);
 app.use('/uploads', uploadsRouter);
 app.use('/master-admin', masterAdminRouter);
 
+// ── Static frontend ───────────────────────────────────────────────────────────
 const distPathCandidates = [
   path.resolve(__dirname, '../../dist'),
   path.resolve(__dirname, '../../src/dist'),
 ];
 const distPath = distPathCandidates.find(p => fs.existsSync(path.join(p, 'index.html')));
+if (distPath) app.use(express.static(distPath));
 
-if (distPath) {
-  app.use(express.static(distPath));
-}
+const API_PREFIXES = [
+  '/auth', '/profiles', '/documents', '/customers', '/suppliers', '/items',
+  '/subscription', '/analytics', '/payments', '/reports', '/ledger',
+  '/extra-expenses', '/uploads', '/health', '/bank-transactions',
+  '/vyapar-khata', '/master-admin',
+];
+
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/auth') || req.path.startsWith('/profiles') || req.path.startsWith('/documents') || req.path.startsWith('/customers') || req.path.startsWith('/suppliers') || req.path.startsWith('/items') || req.path.startsWith('/subscription') || req.path.startsWith('/analytics') || req.path.startsWith('/payments') || req.path.startsWith('/reports') || req.path.startsWith('/ledger') || req.path.startsWith('/extra-expenses') || req.path.startsWith('/uploads') || req.path.startsWith('/health')) {
-    return next();
-  }
-  if (!distPath) {
-    return res.status(500).send('Frontend build not found');
-  }
+  if (API_PREFIXES.some(p => req.path.startsWith(p))) return next();
+  if (!distPath) return res.status(500).send('Frontend build not found');
   return res.sendFile(path.join(distPath, 'index.html'));
 });
 
+// ── Global error handler ──────────────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
-  // eslint-disable-next-line no-console
-  console.error(err);
+  // Don't log 4xx — those are client errors, not server problems
+  if (!err?.status || err.status >= 500) {
+    console.error('[ERROR]', err?.message || err);
+  }
   const status = Number(err?.status || err?.statusCode || 500);
   const message = err?.message ? String(err.message) : 'Internal server error';
+  // Never leak stack traces to clients
   res.status(status).json({ error: message });
 });
 
+// ── MongoDB connection with retry ─────────────────────────────────────────────
+const MONGO_OPTS = {
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  maxPoolSize: 10,
+};
+
+async function connectWithRetry(uri, retries = 5, delayMs = 3000) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      await mongoose.connect(uri, MONGO_OPTS);
+      console.log('✅ MongoDB connected');
+      return;
+    } catch (err) {
+      console.error(`❌ MongoDB connection attempt ${i}/${retries} failed: ${err.message}`);
+      if (i === retries) throw err;
+      await new Promise(r => setTimeout(r, delayMs * i)); // exponential back-off
+    }
+  }
+}
+
+// Re-connect on unexpected disconnects (e.g. Atlas failover)
+mongoose.connection.on('disconnected', () => {
+  console.warn('⚠️  MongoDB disconnected — attempting reconnect…');
+  connectWithRetry(mongoUri).catch(err => console.error('Reconnect failed:', err.message));
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB error:', err.message);
+});
+
+// ── Start server ──────────────────────────────────────────────────────────────
 const port = Number(process.env.PORT || 4000);
-const mongoUri = process.env.MONGODB_URI;
 
-// Debug: Check if environment variables are loaded
-console.log('🔧 Environment variables loaded:');
-console.log('- PORT:', process.env.PORT || 'not set');
-console.log('- MONGODB_URI:', mongoUri ? '✅ set' : '❌ not set');
-console.log('- JWT_SECRET:', process.env.JWT_SECRET ? '✅ set' : '❌ not set');
+await connectWithRetry(mongoUri);
 
-if (!mongoUri) {
-  console.error('❌ MONGODB_URI is missing from .env file');
-  console.error('❌ Make sure .env file exists in backend directory with MONGODB_URI');
-  throw new Error('MONGODB_URI is required');
-}
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET is required');
-}
-
-await mongoose.connect(mongoUri);
-
+// ── Auto-reminders (Twilio) ───────────────────────────────────────────────────
 const remindersEnabled = String(process.env.AUTO_REMINDERS_ENABLED || '').toLowerCase() === 'true';
 const reminderIntervalMinutes = Number(process.env.AUTO_REMINDERS_INTERVAL_MINUTES || 60);
 const reminderLookbackDays = Number(process.env.AUTO_REMINDERS_LOOKBACK_DAYS || 60);
@@ -146,27 +222,14 @@ const shouldRunTwilio = remindersEnabled && twilioAccountSid && twilioAuthToken 
 const twilioClient = shouldRunTwilio ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
 const isSameDay = (a, b) => {
-  const da = new Date(a);
-  const db = new Date(b);
+  const da = new Date(a); const db = new Date(b);
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 };
-
-const parseDocDate = (s) => {
-  if (!s) return null;
-  const d = new Date(String(s));
-  return Number.isNaN(d.getTime()) ? null : d;
-};
-
-const daysBetween = (a, b) => {
-  const da = new Date(a);
-  const db = new Date(b);
-  const diff = Math.abs(db.getTime() - da.getTime());
-  return diff / (1000 * 60 * 60 * 24);
-};
+const parseDocDate = (s) => { if (!s) return null; const d = new Date(String(s)); return Number.isNaN(d.getTime()) ? null : d; };
+const daysBetween = (a, b) => Math.abs(new Date(b).getTime() - new Date(a).getTime()) / (1000 * 60 * 60 * 24);
 
 const runAutoReminders = async () => {
   if (!twilioClient) return;
-
   const now = new Date();
   const lookbackStart = new Date(now);
   lookbackStart.setDate(now.getDate() - reminderLookbackDays);
@@ -181,25 +244,14 @@ const runAutoReminders = async () => {
   for (const doc of candidates) {
     const to = String(doc.customerMobile || '').trim();
     if (!to) continue;
-
     const due = parseDocDate(doc.dueDate);
-    if (!due) continue;
-
-    const isDueOrOverdue = due.getTime() <= now.getTime();
-    if (!isDueOrOverdue) continue;
-
-    const isOverdue = now.getTime() > due.getTime();
-
+    if (!due || due.getTime() > now.getTime()) continue;
     const last = doc.lastReminderSentAt;
     if (last && isSameDay(last, now)) continue;
-
-    if (isOverdue && last && Number.isFinite(reminderThrottleDays) && reminderThrottleDays > 1) {
-      if (daysBetween(last, now) < reminderThrottleDays) continue;
-    }
+    if (doc.paymentStatus !== 'paid' && last && daysBetween(last, now) < reminderThrottleDays) continue;
 
     const profile = await BusinessProfile.findOne({ _id: doc.profileId, userId: doc.userId }).lean();
     const template = String(profile?.smsReminderTemplate || '').trim();
-
     const amount = Number(doc.grandTotal || 0);
     const invoiceNo = String(doc.documentNumber || '').trim();
     const party = String(doc.customerName || '').trim();
@@ -207,53 +259,73 @@ const runAutoReminders = async () => {
     const businessName = String(profile?.businessName || '').trim();
 
     const defaultMsg = `Payment Reminder: ${party ? party + ', ' : ''}${invoiceNo ? invoiceNo + ', ' : ''}Amount ₹${amount.toFixed(2)}${dueStr ? ` due on ${dueStr}` : ''}. Kindly pay at the earliest.`;
-    const fromTemplate = template
-      ? template
-          .replaceAll('{party}', party)
-          .replaceAll('{docNo}', invoiceNo)
-          .replaceAll('{amount}', amount.toFixed(2))
-          .replaceAll('{dueDate}', dueStr)
+    const msg = template
+      ? template.replaceAll('{party}', party).replaceAll('{docNo}', invoiceNo)
+          .replaceAll('{amount}', amount.toFixed(2)).replaceAll('{dueDate}', dueStr)
           .replaceAll('{businessName}', businessName)
-      : '';
-    const msg = fromTemplate || defaultMsg;
+      : defaultMsg;
 
     try {
       await twilioClient.messages.create({ from: twilioFrom, to, body: msg });
       doc.lastReminderSentAt = new Date();
-      doc.reminderLogs = [
-        ...(doc.reminderLogs || []),
-        { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'sent', error: null },
-      ];
+      doc.reminderLogs = [...(doc.reminderLogs || []), { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'sent', error: null }];
       await doc.save();
     } catch (e) {
-      const error = e?.message ? String(e.message) : 'Failed to send SMS';
-      doc.reminderLogs = [
-        ...(doc.reminderLogs || []),
-        { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'failed', error },
-      ];
+      doc.reminderLogs = [...(doc.reminderLogs || []), { sentAt: new Date(), channel: 'sms', to, message: msg, status: 'failed', error: e?.message || 'Failed' }];
       await doc.save();
     }
   }
 };
 
-app.listen(port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Backend listening on http://localhost:${port}`);
+const server = app.listen(port, () => {
+  console.log(`🚀 Backend listening on http://localhost:${port}`);
+  console.log(`📦 MongoDB: ${mongoUri.replace(/\/\/[^@]+@/, '//***@')}`); // mask credentials
 });
 
-if (remindersEnabled && !shouldRunTwilio) {
-  // eslint-disable-next-line no-console
-  console.warn('AUTO_REMINDERS_ENABLED=true but Twilio env vars are missing; auto reminders will not run');
+if (shouldRunTwilio) {
+  console.log(`📨 Auto reminders enabled: every ${reminderIntervalMinutes} min`);
+  const intervalMs = Math.max(1, reminderIntervalMinutes) * 60 * 1000;
+  setInterval(() => runAutoReminders().catch(err => console.error('Reminder job failed:', err.message)), intervalMs);
+} else if (remindersEnabled) {
+  console.warn('⚠️  AUTO_REMINDERS_ENABLED=true but Twilio env vars missing');
 }
 
-if (shouldRunTwilio) {
-  // eslint-disable-next-line no-console
-  console.log(`Auto reminders enabled: interval ${reminderIntervalMinutes} minutes`);
-  const intervalMs = Math.max(1, reminderIntervalMinutes) * 60 * 1000;
-  setInterval(() => {
-    runAutoReminders().catch((err) => {
-      // eslint-disable-next-line no-console
-      console.error('Auto reminder job failed', err);
-    });
-  }, intervalMs);
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
+// Lets in-flight requests finish before closing (important on Render/Railway)
+let shuttingDown = false;
+
+function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal} received — shutting down gracefully…`);
+
+  server.close(async () => {
+    try {
+      await mongoose.connection.close();
+      console.log('✅ MongoDB connection closed');
+    } catch (e) {
+      console.error('Error closing MongoDB:', e.message);
+    }
+    process.exit(0);
+  });
+
+  // Force exit after 10s if requests don't drain
+  setTimeout(() => {
+    console.error('⚠️  Forced shutdown after timeout');
+    process.exit(1);
+  }, 10_000);
 }
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+
+// Catch unhandled promise rejections — log but don't crash
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  // Give logger time to flush, then exit — let process manager restart
+  setTimeout(() => process.exit(1), 500);
+});

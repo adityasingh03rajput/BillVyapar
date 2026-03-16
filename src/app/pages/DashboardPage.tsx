@@ -31,39 +31,71 @@ export function DashboardPage() {
   const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
   const profileId = currentProfile?.id;
 
+  const DASH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+  const dashCacheKey = profileId ? `cache:dashboard:${profileId}` : null;
+
+  const readDashCache = () => {
+    if (!dashCacheKey) return null;
+    try {
+      const raw = localStorage.getItem(dashCacheKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.ts || Date.now() - parsed.ts > DASH_CACHE_TTL_MS) return null;
+      return parsed as { ts: number; analytics: any; recentDocs: any[] };
+    } catch { return null; }
+  };
+
+  const writeDashCache = (analytics: any, recentDocs: any[]) => {
+    if (!dashCacheKey) return;
+    try {
+      localStorage.setItem(dashCacheKey, JSON.stringify({ ts: Date.now(), analytics, recentDocs }));
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     loadDashboardData();
   }, []);
 
   const loadDashboardData = async () => {
+    // Serve cached data immediately — no loading flash on revisit
+    const cached = readDashCache();
+    if (cached) {
+      setAnalytics(cached.analytics);
+      setRecentDocs(cached.recentDocs);
+      setLoading(false);
+      // Revalidate in background
+      loadDashboardData_network();
+      return;
+    }
+    await loadDashboardData_network();
+  };
+
+  const loadDashboardData_network = async () => {
     try {
       const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId };
 
       // Load analytics
-      const analyticsRes = await fetch(`${apiUrl}/analytics`, {
-        headers,
-      });
-
-      if (analyticsRes.status === 403) {
-        setAnalytics(null);
-      } else {
-        const analyticsData = await analyticsRes.json();
-        if (!analyticsData.error) setAnalytics(analyticsData);
+      const analyticsRes = await fetch(`${apiUrl}/analytics`, { headers });
+      let analyticsData: any = null;
+      if (analyticsRes.status !== 403) {
+        const d = await analyticsRes.json();
+        if (!d.error) analyticsData = d;
       }
+      if (analyticsData) setAnalytics(analyticsData);
 
       // Load recent documents
-      const docsRes = await fetch(`${apiUrl}/documents`, {
-        headers,
-      });
-
-      if (docsRes.status === 403) {
-        setRecentDocs([]);
-      } else {
-        const docsData = await docsRes.json();
-        if (!docsData.error) setRecentDocs(docsData.slice(0, 5));
+      const docsRes = await fetch(`${apiUrl}/documents`, { headers });
+      let recentDocsData: any[] = [];
+      if (docsRes.status !== 403) {
+        const d = await docsRes.json();
+        if (!d.error) recentDocsData = d.slice(0, 5);
       }
+      setRecentDocs(recentDocsData);
 
-      // Load subscription
+      // Write cache
+      writeDashCache(analyticsData, recentDocsData);
+
+      // Load subscription (not cached — always fresh)
       if (profileId) {
         const online = await validateSubscriptionTokenOnline({
           apiUrl,
@@ -75,9 +107,7 @@ export function DashboardPage() {
           cacheSubscriptionToken(profileId, online.token);
         }
 
-        const subRes = await fetch(`${apiUrl}/subscription/validate`, {
-          headers,
-        });
+        const subRes = await fetch(`${apiUrl}/subscription/validate`, { headers });
         const subData = await subRes.json();
         if (!subData?.error && subData?.subscription) setSubscription(subData.subscription);
       } else {
@@ -87,8 +117,7 @@ export function DashboardPage() {
         const subData = await subRes.json();
         if (!subData.error) setSubscription(subData);
       }
-
-    } catch (error) {
+    } catch {
       // ignore
     } finally {
       setLoading(false);

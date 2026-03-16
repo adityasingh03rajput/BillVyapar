@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { Button } from './ui/button';
 import {
@@ -15,7 +15,6 @@ import {
   CreditCard,
   Landmark,
   LogOut,
-  Settings,
   Crown,
   Truck,
   Plus,
@@ -49,6 +48,9 @@ import {
   validateSubscriptionOffline,
   validateSubscriptionTokenOnline,
 } from '../utils/subscriptionValidation';
+import { useIsNative } from '../hooks/useIsNative';
+import { MobileLayout } from './MobileLayout';
+import { prefetchRoute } from '../hooks/usePrefetch';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -59,6 +61,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const { signOut, accessToken, deviceId } = useAuth();
   const { theme, setTheme } = useTheme();
+  const isNative = useIsNative();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [subscriptionWarning, setSubscriptionWarning] = useState<string | null>(null);
@@ -203,30 +206,6 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     const run = async () => {
-      if (!accessToken) return;
-      const profileId = readCurrentProfile()?.id;
-      if (!profileId) return;
-
-      try {
-        const online = await validateSubscriptionTokenOnline({
-          apiUrl: API_URL,
-          accessToken,
-          deviceId,
-          profileId,
-        });
-        if (online.ok && online.token) {
-          cacheSubscriptionToken(profileId, online.token);
-        }
-      } catch {
-        // ignore (offline)
-      }
-    };
-
-    run();
-  }, [accessToken, deviceId, location.pathname]);
-
-  useEffect(() => {
-    const run = async () => {
       if (!accessToken) {
         setProfileGateChecked(true);
         return;
@@ -245,47 +224,31 @@ export function AppLayout({ children }: AppLayoutProps) {
         return;
       }
 
-      try {
-        const online = await validateSubscriptionTokenOnline({
-          apiUrl: API_URL,
-          accessToken,
-          deviceId,
-          profileId,
-        });
-
-        if (online.ok && online.token) {
-          cacheSubscriptionToken(profileId, online.token);
-          const offlineResult = await validateSubscriptionOffline(profileId);
-          applySubscriptionResult(offlineResult, 'network');
-          if (offlineResult.status !== 'ok' && offlineResult.status !== 'no_cache_allow') {
-            navigate('/welcome');
-            setProfileGateChecked(true);
-            return;
-          }
-        }
-
-        const subCheck = await validateSubscriptionOffline(profileId);
-        applySubscriptionResult(subCheck, 'network');
-        if (subCheck.status !== 'ok' && subCheck.status !== 'no_cache_allow') {
-          navigate('/welcome');
-          setProfileGateChecked(true);
-          return;
-        }
-        setProfileGateChecked(true);
-      } catch {
-        const subCheck = await validateSubscriptionOffline(profileId);
-        applySubscriptionResult(subCheck, 'cache');
-        if (subCheck.status !== 'ok' && subCheck.status !== 'no_cache_allow') {
-          navigate('/welcome');
-          setProfileGateChecked(true);
-          return;
-        }
-        setProfileGateChecked(true);
+      // ── Cache-first on both native and web: show content instantly, revalidate in background ──
+      const subCheck = await validateSubscriptionOffline(profileId);
+      applySubscriptionResult(subCheck, 'cache');
+      if (subCheck.status !== 'ok' && subCheck.status !== 'no_cache_allow') {
+        navigate('/welcome');
       }
+      setProfileGateChecked(true);
+
+      // Background network revalidation — never blocks the UI
+      validateSubscriptionTokenOnline({ apiUrl: API_URL, accessToken, deviceId, profileId })
+        .then(async (online) => {
+          if (online.ok && online.token) {
+            cacheSubscriptionToken(profileId, online.token);
+            const fresh = await validateSubscriptionOffline(profileId);
+            applySubscriptionResult(fresh, 'network');
+            if (fresh.status !== 'ok' && fresh.status !== 'no_cache_allow') {
+              navigate('/welcome');
+            }
+          }
+        })
+        .catch(() => {});
     };
 
     run();
-  }, [accessToken, deviceId, location.pathname, navigate]);
+  }, [accessToken, deviceId, location.pathname, navigate, isNative]);
 
   useEffect(() => {
     if (!profileGateChecked) return;
@@ -369,6 +332,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div key={item.path} className="space-y-1">
             <button
               data-tour-id={menuTourId(item.path)}
+              onMouseEnter={() => prefetchRoute(item.path)}
               onClick={() => {
                 if (item.path === '/dashboard') {
                   navigate(readLastRoute('nav:lastDashboardRoute', '/dashboard', ['/dashboard']));
@@ -524,6 +488,19 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex h-screen bg-background">
+      {/* ── Native Android: delegate to MobileLayout ── */}
+      {isNative ? (
+        // MobileLayout uses position:fixed inset-0 so it escapes this flex container
+        <MobileLayout
+          subscriptionWarning={subscriptionWarning}
+          subscriptionExpired={subscriptionExpired}
+          daysRemaining={daysRemaining}
+          profileGateChecked={profileGateChecked}
+        >
+          {children}
+        </MobileLayout>
+      ) : (
+      <>
       <GuidedTour
         open={walkthroughOpen}
         onOpenChange={(open) => {
@@ -759,6 +736,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           )}
         </main>
       </div>
+      </>
+      )}
     </div>
   );
 }

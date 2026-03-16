@@ -31,4 +31,8 @@ const customerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Compound index — all queries filter on (userId, profileId)
+customerSchema.index({ userId: 1, profileId: 1, createdAt: 1 });
+customerSchema.index({ userId: 1, profileId: 1, name: 1 });
+
 export const Customer = mongoose.model('Customer', customerSchema);

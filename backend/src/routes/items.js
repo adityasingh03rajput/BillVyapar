@@ -29,11 +29,12 @@ itemsRouter.post('/', enforceLimit('maxItems', (req) => Item.countDocuments({ us
 
 itemsRouter.get('/', async (req, res, next) => {
   try {
-    const items = await Item.find({ userId: req.userId, profileId: req.profileId }).sort({ createdAt: 1 });
+    const items = await Item.find({ userId: req.userId, profileId: req.profileId }).sort({ createdAt: 1 }).lean();
+    res.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     res.json(
       items.map(i => ({
         id: String(i._id),
-        ...i.toObject(),
+        ...i,
         _id: undefined,
         userId: undefined,
         createdAt: i.createdAt?.toISOString?.() ?? i.createdAt,

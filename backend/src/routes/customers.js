@@ -31,11 +31,16 @@ customersRouter.post('/', enforceLimit('maxCustomers', (req) => Customer.countDo
 
 customersRouter.get('/', async (req, res, next) => {
   try {
-    const customers = await Customer.find({ userId: req.userId, profileId: req.profileId }).sort({ createdAt: 1 });
+    const customers = await Customer.find(
+      { userId: req.userId, profileId: req.profileId },
+      '-logoDataUrl' // exclude large base64 logo from list
+    ).sort({ createdAt: 1 }).lean();
+
+    res.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     res.json(
       customers.map(c => ({
         id: String(c._id),
-        ...c.toObject(),
+        ...c,
         _id: undefined,
         userId: undefined,
         createdAt: c.createdAt?.toISOString?.() ?? c.createdAt,

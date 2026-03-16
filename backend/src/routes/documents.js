@@ -336,11 +336,18 @@ documentsRouter.post('/', enforceLimit('maxDocumentsPerMonth', (req) => {
 
 documentsRouter.get('/', async (req, res, next) => {
   try {
-    const docs = await Document.find({ userId: req.userId, profileId: req.profileId }).sort({ createdAt: -1 });
+    // Exclude heavy fields from list view — reminderLogs and items are only needed on single-doc fetch
+    const docs = await Document.find(
+      { userId: req.userId, profileId: req.profileId },
+      '-reminderLogs -internalNotes'
+    ).sort({ createdAt: -1 }).lean();
+
+    // Short-lived cache: 30s private (user-specific data)
+    res.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     res.json(
       docs.map(d => ({
         id: String(d._id),
-        ...d.toObject(),
+        ...d,
         _id: undefined,
         userId: undefined,
         createdAt: d.createdAt?.toISOString?.() ?? d.createdAt,
