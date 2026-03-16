@@ -54,21 +54,6 @@ export function AuthPage() {
     navigate('/welcome', { replace: true });
   }, [user, authLoading, navigate]);
 
-  // While auth is initializing, show a blank splash (prevents login form flash)
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-green-50">
-        <div className="flex flex-col items-center gap-3">
-          <FileText className="h-12 w-12 text-blue-600 animate-pulse" />
-          <span className="text-lg font-semibold text-blue-700">BillVyapar</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Already logged in — don't render the form, navigation effect will redirect
-  if (user) return null;
-
   useEffect(() => {
     let cancelled = false;
 
@@ -100,6 +85,21 @@ export function AuthPage() {
   useEffect(() => {
     if (apiEditOpen) setApiDraft(API_URL);
   }, [apiEditOpen]);
+
+  // While auth is initializing, show a blank splash (prevents login form flash)
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-green-50">
+        <div className="flex flex-col items-center gap-3">
+          <FileText className="h-12 w-12 text-blue-600 animate-pulse" />
+          <span className="text-lg font-semibold text-blue-700">BillVyapar</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Already logged in — don't render the form, navigation effect will redirect
+  if (user) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -10,7 +10,8 @@
     "seed:reset-user": "node src/scripts/reset_and_seed_user.js",
     "create-master-admin": "node src/scripts/createMasterAdmin.js",
     "seed-plans": "node src/scripts/seedDefaultPlans.js",
-    "verify-master-admin": "node src/scripts/verifyMasterAdmin.js"
+    "verify-master-admin": "node src/scripts/verifyMasterAdmin.js",
+    "test:limits": "node src/scripts/testLimitsAndFeatures.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
