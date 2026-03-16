@@ -71,8 +71,9 @@ export default defineConfig({
           if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
           if (id.includes('react-dom') || id.includes('react/') || id.includes('scheduler')) return 'vendor-react';
           if (id.includes('react-router')) return 'vendor-router';
-          if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('sonner')) return 'vendor-ui';
           if (id.includes('react-hook-form') || id.includes('date-fns') || id.includes('react-day-picker')) return 'vendor-forms';
+          if (id.includes('@radix-ui')) return 'vendor-radix';
+          if (id.includes('lucide-react') || id.includes('sonner')) return 'vendor-ui';
           return 'vendor';
         },
       },

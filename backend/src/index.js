@@ -145,7 +145,15 @@ const distPathCandidates = [
   path.resolve(__dirname, '../../src/dist'),
 ];
 const distPath = distPathCandidates.find(p => fs.existsSync(path.join(p, 'index.html')));
-if (distPath) app.use(express.static(distPath));
+if (distPath) app.use(express.static(distPath, {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    }
+  },
+}));
 
 const API_PREFIXES = [
   '/auth', '/profiles', '/documents', '/customers', '/suppliers', '/items',
