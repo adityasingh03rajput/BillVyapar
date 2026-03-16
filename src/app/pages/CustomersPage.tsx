@@ -44,9 +44,23 @@ interface Customer {
   openingBalanceType?: 'dr' | 'cr';
 }
 
+function readCustomersCacheSync(): Customer[] {
+  try {
+    const raw = localStorage.getItem('currentProfile');
+    if (!raw) return [];
+    const p = JSON.parse(raw);
+    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
+    if (!profileId) return [];
+    const entry = localStorage.getItem(`cache:customers:${profileId}`);
+    if (!entry) return [];
+    const parsed = JSON.parse(entry);
+    return Array.isArray(parsed?.data) ? parsed.data : [];
+  } catch { return []; }
+}
+
 export function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(() => readCustomersCacheSync());
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>(() => readCustomersCacheSync());
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [formData, setFormData] = useState<Partial<Customer>>({});
@@ -55,7 +69,7 @@ export function CustomersPage() {
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<Customer>>({});
   const [editFormErrors, setEditFormErrors] = useState<{ gstin?: string; phone?: string; email?: string }>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => readCustomersCacheSync().length === 0);
   const [gstinLoading, setGstinLoading] = useState(false);
   const [gstinLookupLoading, setGstinLookupLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

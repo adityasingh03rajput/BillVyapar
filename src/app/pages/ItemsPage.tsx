@@ -27,9 +27,23 @@ interface Item {
   description?: string;
 }
 
+function readItemsCacheSync(): Item[] {
+  try {
+    const raw = localStorage.getItem('currentProfile');
+    if (!raw) return [];
+    const p = JSON.parse(raw);
+    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
+    if (!profileId) return [];
+    const entry = localStorage.getItem(`cache:items:${profileId}`);
+    if (!entry) return [];
+    const parsed = JSON.parse(entry);
+    return Array.isArray(parsed?.data) ? parsed.data : [];
+  } catch { return []; }
+}
+
 export function ItemsPage() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<Item[]>(() => readItemsCacheSync());
+  const [filteredItems, setFilteredItems] = useState<Item[]>(() => readItemsCacheSync());
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -45,7 +59,7 @@ export function ItemsPage() {
     sgst: 9,
     igst: 0,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => readItemsCacheSync().length === 0);
   const { accessToken, deviceId } = useAuth();
 
   const apiUrl = API_URL;

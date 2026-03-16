@@ -41,9 +41,23 @@ interface Supplier {
   openingBalanceType?: 'dr' | 'cr';
 }
 
+function readSuppliersCacheSync(): Supplier[] {
+  try {
+    const raw = localStorage.getItem('currentProfile');
+    if (!raw) return [];
+    const p = JSON.parse(raw);
+    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
+    if (!profileId) return [];
+    const entry = localStorage.getItem(`cache:suppliers:${profileId}`);
+    if (!entry) return [];
+    const parsed = JSON.parse(entry);
+    return Array.isArray(parsed?.data) ? parsed.data : [];
+  } catch { return []; }
+}
+
 export function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => readSuppliersCacheSync());
+  const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>(() => readSuppliersCacheSync());
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [formData, setFormData] = useState<Partial<Supplier>>({});
@@ -52,7 +66,7 @@ export function SuppliersPage() {
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<Supplier>>({});
   const [editFormErrors, setEditFormErrors] = useState<{ gstin?: string; phone?: string; email?: string }>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => readSuppliersCacheSync().length === 0);
   const [gstinLoading, setGstinLoading] = useState(false);
   const [gstinLookupLoading, setGstinLookupLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

@@ -17,13 +17,29 @@ import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { cacheSubscriptionToken, validateSubscriptionTokenOnline } from '../utils/subscriptionValidation';
 import { TraceLoader } from '../components/TraceLoader';
+import { prefetchRoutesOnIdle } from '../hooks/usePrefetch';
+
+function readDashCacheSync() {
+  try {
+    const raw = localStorage.getItem('currentProfile');
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
+    if (!profileId) return null;
+    const entry = localStorage.getItem(`cache:dashboard:${profileId}`);
+    if (!entry) return null;
+    const parsed = JSON.parse(entry);
+    if (!parsed?.ts) return null;
+    return parsed as { ts: number; analytics: any; recentDocs: any[] };
+  } catch { return null; }
+}
 
 export function DashboardPage() {
-
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [recentDocs, setRecentDocs] = useState<any[]>([]);
+  const _initCache = readDashCacheSync();
+  const [analytics, setAnalytics] = useState<any>(_initCache?.analytics ?? null);
+  const [recentDocs, setRecentDocs] = useState<any[]>(_initCache?.recentDocs ?? []);
   const [subscription, setSubscription] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!_initCache);
   const { accessToken, deviceId } = useAuth();
   const navigate = useNavigate();
 
@@ -94,6 +110,9 @@ export function DashboardPage() {
 
       // Write cache
       writeDashCache(analyticsData, recentDocsData);
+
+      // Prefetch the most-visited pages while the device is idle
+      prefetchRoutesOnIdle(['/documents', '/customers', '/items', '/analytics']);
 
       // Load subscription (not cached — always fresh)
       if (profileId) {

@@ -37,7 +37,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return 'light';
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw === 'light' || raw === 'dark' || raw === 'system' || raw === 'warm' || raw === 'ocean' || raw === 'emerald' || raw === 'rosewood') return raw;
-    return 'warm';
+    return 'dark';
   });
 
   const resolvedTheme = useMemo(() => {

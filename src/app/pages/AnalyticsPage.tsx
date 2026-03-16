@@ -19,20 +19,50 @@ import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 
+function readAnalyticsCacheSync(key: string): any | null {
+  try {
+    const entry = localStorage.getItem(key);
+    if (!entry) return null;
+    const parsed = JSON.parse(entry);
+    return parsed?.data ?? null;
+  } catch { return null; }
+}
+
 export function AnalyticsPage() {
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
+  const profileId = currentProfile?.id;
+  const ANALYTICS_CACHE_KEY = profileId ? `cache:analytics:${profileId}` : '';
+  const ANALYTICS_CACHE_TTL = 5 * 60 * 1000;
+
+  const _initAnalytics = ANALYTICS_CACHE_KEY ? readAnalyticsCacheSync(ANALYTICS_CACHE_KEY) : null;
+  const [analytics, setAnalytics] = useState<any>(_initAnalytics);
+  const [loading, setLoading] = useState(!_initAnalytics);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [applyingRange, setApplyingRange] = useState(false);
   const { accessToken, deviceId } = useAuth();
 
   const apiUrl = API_URL;
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const profileId = currentProfile?.id;
+
+  const writeAnalyticsCache = (data: any, sd: string, ed: string) => {
+    // Only cache the default (no date range) view
+    if (sd || ed || !ANALYTICS_CACHE_KEY) return;
+    try {
+      localStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+    } catch { /* ignore */ }
+  };
 
   useEffect(() => {
-    loadAnalytics();
+    // Serve cache immediately, revalidate in background
+    const cached = ANALYTICS_CACHE_KEY ? readAnalyticsCacheSync(ANALYTICS_CACHE_KEY) : null;
+    if (cached) {
+      setAnalytics(cached);
+      setLoading(false);
+      loadAnalytics(); // background revalidate
+    } else {
+      loadAnalytics();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAnalytics = async (opts?: { startDate?: string; endDate?: string }) => {
@@ -56,6 +86,7 @@ export function AnalyticsPage() {
         toast.error(data.error);
       } else {
         setAnalytics(data);
+        writeAnalyticsCache(data, sd, ed);
       }
     } catch (error) {
       toast.error('Failed to load analytics');

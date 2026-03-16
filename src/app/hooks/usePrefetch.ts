@@ -39,3 +39,18 @@ export function prefetchRoute(path: string) {
 export function usePrefetch() {
   return prefetchRoute;
 }
+
+/**
+ * Prefetch a set of routes during browser idle time.
+ * Call this after a page has finished its own data loading.
+ * On Android WebView requestIdleCallback is available from API 47+.
+ */
+export function prefetchRoutesOnIdle(paths: string[]) {
+  const run = () => paths.forEach(prefetchRoute);
+  const w = window as any;
+  if (typeof w.requestIdleCallback === 'function') {
+    w.requestIdleCallback(run, { timeout: 3000 });
+  } else {
+    setTimeout(run, 1000);
+  }
+}

@@ -45,10 +45,31 @@ import { fetchDocumentById, PDF_TEMPLATES, PdfRenderer, exportElementToPdf, expo
 import { useRef } from 'react';
 import QRCode from 'qrcode';
 
+/** Read documents from localStorage synchronously — used to seed state before first render */
+function readDocsCacheSync(): any[] {
+  try {
+    const raw = localStorage.getItem('currentProfile');
+    if (!raw) return [];
+    const profile = JSON.parse(typeof JSON.parse(raw) === 'string' ? JSON.parse(raw) : raw);
+    const profileId = profile?.id;
+    if (!profileId) return [];
+    const entry = localStorage.getItem(`cache:documents:${profileId}`);
+    if (!entry) return [];
+    const parsed = JSON.parse(entry);
+    return Array.isArray(parsed?.data) ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
+
 export function DocumentsPage() {
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [filteredDocs, setFilteredDocs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [documents, setDocuments] = useState<any[]>(() => readDocsCacheSync());
+  const [filteredDocs, setFilteredDocs] = useState<any[]>(() => readDocsCacheSync());
+  const [loading, setLoading] = useState(() => readDocsCacheSync().length === 0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalDocs, setTotalDocs] = useState(0);
+  const PAGE_SIZE = 50;
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteDoc, setDeleteDoc] = useState<any | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -409,7 +430,6 @@ export function DocumentsPage() {
       setDocuments(cached.data);
       filterDocuments(cached.data);
       setLoading(false);
-      // If cache is fresh, skip network fetch entirely
       if (isFresh) return;
       // Stale — revalidate in background without showing spinner
     } else {
@@ -417,21 +437,52 @@ export function DocumentsPage() {
     }
 
     try {
-      const response = await fetch(`${apiUrl}/documents`, {
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
-      });
-      const data = await response.json();
-      if (data.error) {
-        toast.error(data.error);
-      } else {
-        setDocuments(data);
-        filterDocuments(data);
-        if (Array.isArray(data)) writeDocsCache(data);
+      const response = await fetch(
+        `${apiUrl}/documents?limit=${PAGE_SIZE}&skip=0`,
+        { headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId } }
+      );
+      const json = await response.json();
+      if (json.error) {
+        toast.error(json.error);
+        return;
       }
-    } catch (error) {
+      // Support both old array response and new paginated response
+      const data: any[] = Array.isArray(json) ? json : (json.data ?? []);
+      const total: number = json.total ?? data.length;
+      const more: boolean = json.hasMore ?? false;
+      setDocuments(data);
+      filterDocuments(data);
+      setTotalDocs(total);
+      setHasMore(more);
+      writeDocsCache(data);
+    } catch {
       toast.error('Failed to load documents');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreDocuments = async () => {
+    if (!accessToken || !deviceId || !profileId || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const response = await fetch(
+        `${apiUrl}/documents?limit=${PAGE_SIZE}&skip=${documents.length}`,
+        { headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId } }
+      );
+      const json = await response.json();
+      if (json.error) { toast.error(json.error); return; }
+      const newDocs: any[] = Array.isArray(json) ? json : (json.data ?? []);
+      const merged = [...documents, ...newDocs];
+      setDocuments(merged);
+      filterDocuments(merged);
+      setHasMore(json.hasMore ?? false);
+      setTotalDocs(json.total ?? merged.length);
+      writeDocsCache(merged);
+    } catch {
+      toast.error('Failed to load more documents');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -1146,9 +1197,21 @@ export function DocumentsPage() {
           ) : (
             <>
               {filteredDocs.map((doc) => <MobileDocCard key={doc.id} doc={doc} />)}
-              <p className="text-center text-xs text-gray-400 mt-2 mb-2">
-                {filteredDocs.length} of {documents.length} documents
-              </p>
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={loadMoreDocuments}
+                  disabled={loadingMore}
+                  className="w-full py-3 text-sm font-medium text-primary disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading...' : `Load more (${documents.length} of ${totalDocs})`}
+                </button>
+              )}
+              {!hasMore && documents.length > 0 && (
+                <p className="text-center text-xs text-gray-400 mt-2 mb-2">
+                  {filteredDocs.length} of {documents.length} documents
+                </p>
+              )}
             </>
           )}
         </div>
@@ -1646,6 +1709,15 @@ export function DocumentsPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        )}
+
+        {/* Load more */}
+        {hasMore && (
+          <div className="mt-4 flex justify-center">
+            <Button variant="outline" onClick={loadMoreDocuments} disabled={loadingMore}>
+              {loadingMore ? 'Loading...' : `Load more (${documents.length} of ${totalDocs})`}
+            </Button>
           </div>
         )}
 

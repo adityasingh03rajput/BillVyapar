@@ -18,7 +18,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 
-/** Returns true for ~120ms after every route change — used to fade content in */
+/** Returns true for ~80ms after every route change — used to fade content in */
 function usePageTransition() {
   const location = useLocation();
   const [transitioning, setTransitioning] = useState(false);
@@ -27,7 +27,7 @@ function usePageTransition() {
     if (location.pathname === prev.current) return;
     prev.current = location.pathname;
     setTransitioning(true);
-    const t = setTimeout(() => setTransitioning(false), 120);
+    const t = setTimeout(() => setTransitioning(false), 80);
     return () => clearTimeout(t);
   }, [location.pathname]);
   return transitioning;
@@ -183,20 +183,22 @@ export function MobileLayout({
 
   return (
     // fixed inset-0 escapes the parent flex container in AppLayout
-    <div className="fixed inset-0 flex flex-col overflow-hidden z-0" style={{ background: 'var(--mobile-bg, #f0f7f0)' }}>
+    <div className="fixed inset-0 flex flex-col overflow-hidden z-0" style={{ background: 'var(--background, #0f172a)' }}>
 
       {/* ── Top bar ── */}
       <header
-        className="shrink-0 flex items-center justify-between px-4 bg-gradient-to-r from-blue-600 to-blue-500"
+        className="shrink-0 flex items-center justify-between px-4"
         style={{
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)',
           paddingBottom: '10px',
           minHeight: '56px',
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+          borderBottom: '1px solid rgba(99, 102, 241, 0.2)',
         }}
       >
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center">
+          <div className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)', boxShadow: '0 0 12px rgba(99,102,241,0.4)' }}>
             <FileText className="h-4 w-4 text-white" />
           </div>
           <span className="text-white font-bold text-lg tracking-tight">BillVyapar</span>
@@ -205,19 +207,20 @@ export function MobileLayout({
         {/* Right side: offline indicator + avatar */}
         <div className="flex items-center gap-2">
           {offline && (
-            <div className="flex items-center gap-1 bg-white/20 rounded-full px-2 py-0.5">
+            <div className="flex items-center gap-1 rounded-full px-2 py-0.5" style={{ background: 'rgba(255,255,255,0.1)' }}>
               <WifiOff className="h-3 w-3 text-white" />
               <span className="text-white text-[10px] font-medium">Offline</span>
             </div>
           )}
           {!offline && (
-            <div className="h-2 w-2 rounded-full bg-green-300" title="Online" />
+            <div className="h-2 w-2 rounded-full bg-indigo-400" title="Online" />
           )}
           <button
             type="button"
             onClick={() => !subscriptionExpired && navigate('/profiles')}
             aria-label="Profile"
-            className="h-9 w-9 rounded-full bg-white/25 border-2 border-white/40 text-white flex items-center justify-center font-bold text-sm active:scale-95 transition-transform"
+            className="h-9 w-9 rounded-full border-2 text-white flex items-center justify-center font-bold text-sm active:scale-95 transition-transform"
+            style={{ background: 'rgba(99,102,241,0.3)', borderColor: 'rgba(99,102,241,0.5)' }}
           >
             {ini}
           </button>
@@ -241,42 +244,42 @@ export function MobileLayout({
 
       {/* ── Page content ── */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
-        style={{ WebkitOverflowScrolling: 'touch', background: 'var(--mobile-bg, #f0f7f0)' } as any}>
+        style={{ WebkitOverflowScrolling: 'touch', background: 'var(--background, #0f172a)' } as any}>
         {!profileGateChecked ? (
           <div className="flex items-center justify-center h-full">
             <TraceLoader label="Loading..." />
           </div>
         ) : transitioning ? (
-          /* ── Page skeleton — shown for ~120ms on navigation to prevent green flash ── */
-          <div className="p-4 space-y-3 animate-pulse">
-            <div className="h-7 w-40 bg-white/60 rounded-xl" />
-            <div className="h-4 w-56 bg-white/40 rounded-lg" />
-            <div className="h-12 w-full bg-white/60 rounded-2xl mt-2" />
-            <div className="bg-white/70 rounded-2xl p-4 space-y-3">
-              <div className="h-10 bg-gray-100 rounded-xl" />
-              <div className="h-10 bg-gray-100 rounded-xl" />
+          /* ── Page skeleton — shown for ~80ms on navigation to prevent flash ── */
+          <div className="p-4 space-y-3 animate-pulse" style={{ background: 'var(--background)' }}>
+            <div className="h-7 w-40 rounded-xl bg-muted" />
+            <div className="h-4 w-56 rounded-lg bg-muted/60" />
+            <div className="h-12 w-full rounded-2xl mt-2 bg-muted" />
+            <div className="rounded-2xl p-4 space-y-3 bg-muted/60">
+              <div className="h-10 rounded-xl bg-muted" />
+              <div className="h-10 rounded-xl bg-muted" />
               <div className="grid grid-cols-2 gap-2">
-                <div className="h-10 bg-gray-100 rounded-xl" />
-                <div className="h-10 bg-gray-100 rounded-xl" />
+                <div className="h-10 rounded-xl bg-muted" />
+                <div className="h-10 rounded-xl bg-muted" />
               </div>
             </div>
             {[1,2,3].map(i => (
-              <div key={i} className="bg-white/70 rounded-2xl p-4 space-y-2">
+              <div key={i} className="rounded-2xl p-4 space-y-2 bg-muted/60">
                 <div className="flex gap-2">
-                  <div className="h-5 w-24 bg-gray-200 rounded-full" />
-                  <div className="h-5 w-16 bg-gray-100 rounded-full" />
-                  <div className="h-5 w-14 bg-gray-100 rounded-full" />
+                  <div className="h-5 w-24 rounded-full bg-muted" />
+                  <div className="h-5 w-16 rounded-full bg-muted/60" />
+                  <div className="h-5 w-14 rounded-full bg-muted/60" />
                 </div>
-                <div className="h-4 w-48 bg-gray-100 rounded" />
-                <div className="h-4 w-32 bg-gray-100 rounded" />
-                <div className="h-4 w-20 bg-gray-200 rounded" />
+                <div className="h-4 w-48 rounded bg-muted/60" />
+                <div className="h-4 w-32 rounded bg-muted/60" />
+                <div className="h-4 w-20 rounded bg-muted" />
               </div>
             ))}
           </div>
         ) : (
           <div
             key={location.pathname}
-            style={{ animation: 'mobileFadeIn 0.15s ease-out' }}
+            className="page-enter"
           >
             {children}
           </div>
@@ -317,8 +320,9 @@ export function MobileLayout({
           className={`h-14 w-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-200 active:scale-90 ${
             fabOpen
               ? 'bg-slate-700 rotate-45'
-              : 'bg-blue-600 hover:bg-blue-700'
+              : ''
           }`}
+          style={!fabOpen ? { background: 'linear-gradient(135deg, #6366f1, #818cf8)', boxShadow: '0 4px 20px rgba(99,102,241,0.5)' } : {}}
         >
           <Plus className="h-6 w-6 text-white" strokeWidth={2.5} />
         </button>
@@ -327,10 +331,12 @@ export function MobileLayout({
 
       {/* ── Bottom tab bar ── */}
       <nav
-        className="shrink-0 bg-white border-t border-gray-200 flex items-stretch relative"
+        className="shrink-0 flex items-stretch relative"
         style={{
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+          background: '#0f172a',
+          borderTop: '1px solid rgba(99, 102, 241, 0.2)',
         }}
       >
         {PRIMARY_TABS.map((tab) => {
@@ -345,15 +351,13 @@ export function MobileLayout({
               className="flex-1 flex flex-col items-center justify-center gap-0.5 relative active:scale-90 transition-transform"
             >
               <Icon
-                className={`h-5 w-5 transition-colors ${
-                  active ? 'text-blue-600' : 'text-gray-400'
-                }`}
+                className="h-5 w-5 transition-colors"
+                style={{ color: active ? '#818cf8' : '#475569' }}
                 strokeWidth={active ? 2.5 : 1.8}
               />
               <span
-                className={`text-[10px] font-medium transition-colors ${
-                  active ? 'text-blue-600' : 'text-gray-400'
-                }`}
+                className="text-[10px] font-medium transition-colors"
+                style={{ color: active ? '#818cf8' : '#475569' }}
               >
                 {tab.label}
               </span>
@@ -385,7 +389,7 @@ export function MobileLayout({
             </div>
 
             {/* Business card */}
-            <div className="mx-4 mb-4 flex items-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 rounded-2xl p-3.5">
+            <div className="mx-4 mb-4 flex items-center gap-3 rounded-2xl p-3.5" style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}>
               <div className="h-11 w-11 rounded-full bg-white/25 border-2 border-white/40 text-white flex items-center justify-center font-bold text-sm shrink-0">
                 {ini}
               </div>
@@ -418,9 +422,10 @@ export function MobileLayout({
                     onClick={() => goTo(item.path)}
                     className={`flex flex-col items-center gap-1.5 rounded-2xl py-3 px-1 transition-all active:scale-90 ${
                       active
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-muted text-foreground'
+                        ? 'text-white shadow-md'
+                        : 'text-foreground'
                     }`}
+                    style={active ? { background: 'linear-gradient(135deg, #4f46e5, #6366f1)' } : { background: 'var(--muted)' }}
                   >
                     <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 1.8} />
                     <span className="text-[9px] font-medium text-center leading-tight">{item.label}</span>

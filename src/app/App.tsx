@@ -1,6 +1,6 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import React from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router';
+import { createBrowserRouter, RouterProvider, useLocation } from 'react-router';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -32,7 +32,39 @@ const VyaparKhataPageNewWrapper = lazy(() => import('./pages/VyaparKhataPageNewW
 function PageSkeleton() {
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+      <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+    </div>
+  );
+}
+
+/** Wraps page content with a fade+slide-up animation on route change (web only) */
+function AnimatedPage({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const isNative = useIsNative();
+  const [key, setKey] = useState(location.pathname);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    // On native Android, MobileLayout handles its own skeleton transition — skip the opacity flash
+    if (isNative) {
+      setKey(location.pathname);
+      return;
+    }
+    setVisible(false);
+    const t = setTimeout(() => {
+      setKey(location.pathname);
+      setVisible(true);
+    }, 60); // brief pause lets old page fade out
+    return () => clearTimeout(t);
+  }, [location.pathname, isNative]);
+
+  return (
+    <div
+      key={key}
+      className="page-enter"
+      style={!isNative ? { opacity: visible ? undefined : 0, transition: 'opacity 0.06s ease' } : undefined}
+    >
+      {children}
     </div>
   );
 }
@@ -41,7 +73,9 @@ function wrap(Component: React.ComponentType) {
   return (
     <ErrorBoundary>
       <Suspense fallback={<PageSkeleton />}>
-        <Component />
+        <AnimatedPage>
+          <Component />
+        </AnimatedPage>
       </Suspense>
     </ErrorBoundary>
   );

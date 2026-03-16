@@ -336,24 +336,42 @@ documentsRouter.post('/', enforceLimit('maxDocumentsPerMonth', (req) => {
 
 documentsRouter.get('/', async (req, res, next) => {
   try {
-    // Exclude heavy fields from list view — reminderLogs and items are only needed on single-doc fetch
-    const docs = await Document.find(
-      { userId: req.userId, profileId: req.profileId },
-      '-reminderLogs -internalNotes'
-    ).sort({ createdAt: -1 }).lean();
+    const limit  = Math.min(parseInt(String(req.query.limit  || '50'),  10) || 50,  200);
+    const skip   = Math.max(parseInt(String(req.query.skip   || '0'),   10) || 0,   0);
+    const type   = req.query.type   ? String(req.query.type)   : null;
+    const status = req.query.status ? String(req.query.status) : null;
 
-    // Short-lived cache: 30s private (user-specific data)
+    const filter: any = { userId: req.userId, profileId: req.profileId };
+    if (type)   filter.type = type;
+    if (status === 'paid')   filter.paymentStatus = 'paid';
+    if (status === 'unpaid') filter.paymentStatus = { $in: ['unpaid', 'pending', 'partial'] };
+    if (status === 'draft')  filter.status = 'draft';
+
+    // Exclude heavy per-document fields not needed in list view
+    const [docs, total] = await Promise.all([
+      Document.find(filter, '-reminderLogs -internalNotes -items')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Document.countDocuments(filter),
+    ]);
+
     res.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
-    res.json(
-      docs.map(d => ({
+    res.json({
+      data: docs.map(d => ({
         id: String(d._id),
         ...d,
         _id: undefined,
         userId: undefined,
         createdAt: d.createdAt?.toISOString?.() ?? d.createdAt,
         updatedAt: d.updatedAt?.toISOString?.() ?? d.updatedAt,
-      }))
-    );
+      })),
+      total,
+      limit,
+      skip,
+      hasMore: skip + limit < total,
+    });
   } catch (err) {
     next(err);
   }
