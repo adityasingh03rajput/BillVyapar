@@ -56,7 +56,7 @@ export default defineConfig({
     target: 'es2020',
     assetsInlineLimit: 4096,
     cssCodeSplit: true,
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       input: {
         main:  path.resolve(__dirname, 'index.html'),
@@ -67,13 +67,11 @@ export default defineConfig({
         assetFileNames:  'assets/[name]-[hash][extname]',
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
+          // Heavy lazy-loaded libs — safe to split because nothing depends on them at init
           if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('pdfmake')) return 'vendor-pdf';
           if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
-          if (id.includes('react-dom') || id.includes('react/') || id.includes('scheduler')) return 'vendor-react';
-          if (id.includes('react-router')) return 'vendor-router';
-          if (id.includes('react-hook-form') || id.includes('date-fns') || id.includes('react-day-picker')) return 'vendor-forms';
-          if (id.includes('@radix-ui')) return 'vendor-radix';
-          if (id.includes('lucide-react') || id.includes('sonner')) return 'vendor-ui';
+          // Everything else (react, radix, router, lucide…) stays in one vendor chunk
+          // so load order is guaranteed by Rollup's own dependency graph
           return 'vendor';
         },
       },
