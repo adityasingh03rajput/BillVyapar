@@ -69,14 +69,17 @@ masterAdminSubscribersRouter.get('/', async (req, res, next) => {
   try {
     const { status, search, page = 1, limit = 50 } = req.query;
 
-    // Build base filter (status filter applied after real-time resolution)
+    // Sanitize search — escape regex special chars to prevent ReDoS
     const filter = {};
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-      ];
+    if (search && typeof search === 'string') {
+      const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (escaped) {
+        filter.$or = [
+          { name: { $regex: escaped, $options: 'i' } },
+          { email: { $regex: escaped, $options: 'i' } },
+          { phone: { $regex: escaped, $options: 'i' } },
+        ];
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -204,7 +207,12 @@ masterAdminSubscribersRouter.put('/:id', async (req, res, next) => {
     }
 
     const before = subscriber.toObject();
-    Object.assign(subscriber, req.body);
+
+    // Whitelist allowed fields — prevents mass-assignment of internal fields like status, ownerUserId
+    const allowed = ['name', 'email', 'phone', 'gstin', 'notes'];
+    for (const key of allowed) {
+      if (key in req.body) subscriber[key] = typeof req.body[key] === 'string' ? req.body[key].trim() : req.body[key];
+    }
     await subscriber.save();
 
     await logAudit(req.masterAdminId, 'subscriber_updated', subscriber._id, before, subscriber.toObject(), null);

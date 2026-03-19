@@ -14,7 +14,7 @@ export function verifyAccessToken(token) {
 const MASTER_ADMIN_SECRET = process.env.MASTER_ADMIN_JWT_SECRET || process.env.JWT_SECRET + '_master_admin';
 
 export function signMasterAdminToken(payload) {
-  return jwt.sign({ ...payload, _scope: 'master_admin' }, MASTER_ADMIN_SECRET, { expiresIn: '12h' });
+  return jwt.sign({ ...payload, _scope: 'master_admin' }, MASTER_ADMIN_SECRET, { expiresIn: '7d' });
 }
 
 export function verifyMasterAdminToken(token) {

@@ -79,10 +79,18 @@ export function ConsoleLayout({ children }: Props) {
 
   useEffect(() => {
     const tk = localStorage.getItem('masterAdminToken');
-    if (!tk) return;
+    if (!tk) { navigate('/'); return; }
     fetch(`${API_URL}/master-admin/dashboard/stats`, { headers: { Authorization: `Bearer ${tk}` } })
-      .then(r => r.json())
-      .then(d => { if (!d.error) setAlerts({ e7: d.expiringIn7Days || 0, e30: d.expiringIn30Days || 0 }); })
+      .then(r => {
+        if (r.status === 401 || r.status === 403) {
+          localStorage.removeItem('masterAdminToken');
+          localStorage.removeItem('masterAdmin');
+          navigate('/');
+          return null;
+        }
+        return r.json();
+      })
+      .then(d => { if (d && !d.error) setAlerts({ e7: d.expiringIn7Days || 0, e30: d.expiringIn30Days || 0 }); })
       .catch(() => {});
   }, [loc.pathname]);
 

@@ -15,6 +15,7 @@ import { API_URL } from '../config/api';
 import { INDIAN_STATES } from '../utils/indianStates';
 import QRCode from 'qrcode';
 import { TraceLoader } from '../components/TraceLoader';
+import { PhoneInput, EmailInput, GstinInput, PanInput, AccountNumberInput, IfscInput, UpiInput, PostalCodeInput, AddressInput } from '../components/FormattedInputs';
 
 interface BankAccount {
   _id?: string;
@@ -405,45 +406,33 @@ export function ProfilesPage() {
                       onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="editPhone">Phone *</Label>
-                    <Input
-                      id="editPhone"
-                      required
-                      value={editFormData.phone || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                    />
-                  </div>
+                  <PhoneInput
+                    label="Phone *"
+                    value={editFormData.phone || ''}
+                    onChange={(v) => setEditFormData({ ...editFormData, phone: v })}
+                    required
+                  />
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="editGstin">GSTIN</Label>
-                    <Input
-                      id="editGstin"
-                      value={editFormData.gstin || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, gstin: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="editPan">PAN</Label>
-                    <Input
-                      id="editPan"
-                      value={editFormData.pan || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, pan: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="editAddress">Address</Label>
-                  <Textarea
-                    id="editAddress"
-                    value={editFormData.billingAddress || ''}
-                    onChange={(e) => setEditFormData({ ...editFormData, billingAddress: e.target.value })}
-                    rows={2}
+                  <GstinInput
+                    label="GSTIN"
+                    value={editFormData.gstin || ''}
+                    onChange={(v) => setEditFormData({ ...editFormData, gstin: v })}
+                  />
+                  <PanInput
+                    label="PAN"
+                    value={editFormData.pan || ''}
+                    onChange={(v) => setEditFormData({ ...editFormData, pan: v })}
                   />
                 </div>
+
+                <AddressInput
+                  label="Address"
+                  value={editFormData.billingAddress || ''}
+                  onChange={(v) => setEditFormData({ ...editFormData, billingAddress: v })}
+                  rows={2}
+                />
 
                 <div>
                   <Label htmlFor="editSmsReminderTemplate">SMS Reminder Template</Label>
@@ -486,11 +475,9 @@ export function ProfilesPage() {
                   </div>
                   <div>
                     <Label htmlFor="editPostalCode">Postal Code</Label>
-                    <Input
-                      id="editPostalCode"
+                    <PostalCodeInput
                       value={editFormData.postalCode || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, postalCode: e.target.value })}
-                      placeholder="560001"
+                      onChange={(v) => setEditFormData({ ...editFormData, postalCode: v })}
                     />
                   </div>
                 </div>
@@ -515,32 +502,24 @@ export function ProfilesPage() {
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="editAccountNumber">Account Number</Label>
-                    <Input
-                      id="editAccountNumber"
-                      value={editFormData.accountNumber || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, accountNumber: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="editIfscCode">IFSC Code</Label>
-                    <Input
-                      id="editIfscCode"
-                      value={editFormData.ifscCode || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, ifscCode: e.target.value })}
-                    />
-                  </div>
+                  <AccountNumberInput
+                    label="Account Number"
+                    value={editFormData.accountNumber || ''}
+                    onChange={(v) => setEditFormData({ ...editFormData, accountNumber: v })}
+                  />
+                  <IfscInput
+                    label="IFSC Code"
+                    value={editFormData.ifscCode || ''}
+                    onChange={(v) => setEditFormData({ ...editFormData, ifscCode: v })}
+                  />
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4 items-start">
                   <div>
-                    <Label htmlFor="editUpiId">UPI ID</Label>
-                    <Input
-                      id="editUpiId"
+                    <UpiInput
+                      label="UPI ID"
                       value={editFormData.upiId || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, upiId: e.target.value })}
-                      placeholder="business@upi"
+                      onChange={(v) => setEditFormData({ ...editFormData, upiId: v })}
                     />
                     <p className="text-xs text-gray-500 mt-1">Use E.164 phone in signup; UPI ID here is for invoice payments.</p>
                   </div>

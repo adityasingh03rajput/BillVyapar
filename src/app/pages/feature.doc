@@ -1,0 +1,52 @@
+BillVyapar — Feature List
+
+
+Auth & Onboarding
+Login / Register
+Business Profiles (multi-profile support)
+Welcome screen
+Documents
+Create Invoice, Bill, Quotation, etc.
+Edit & manage documents
+PDF generation & download
+Parties
+Customers management
+Suppliers management
+Inventory
+Items / Products management
+Finance
+Dashboard (overview & stats)
+Analytics & charts
+GST Reports
+Party Ledger
+Bank Accounts
+Extra Expenses
+Vyapar Khata (ledger book)
+Point of Sale
+POS screen
+Subscription
+Plan management & upgrade
+Employee Tracking Module (New)
+Employee Side (Mobile App)
+Face verification check-in / check-out powered by AI
+Mark attendance with selfie + GPS location
+Live location sharing (background tracking while on duty)
+Start / Stop work session
+View own attendance history
+View total distance traveled per day/week/month
+Manager Side (Web + Mobile)
+Live map showing all active employees in real time
+Employee location history playback (route replay on map)
+Total travel distance per employee with timeline
+Attendance records — present / absent / late / half-day
+Face verification logs with photo evidence
+Geofence alerts — notify when employee leaves assigned zone
+Employee work session reports (check-in time, check-out time, duration)
+Export attendance & travel reports (PDF / CSV)
+Additional Features
+Leave management — apply, approve, reject
+Task assignment to field employees with location tagging
+Beat/route planning — assign daily visit routes to employees
+Customer visit tracking — log which customer was visited, when, and where
+Salary & payroll summary based on attendance
+Notifications — late check-in alerts, missed check-out reminders

@@ -150,9 +150,7 @@ export function ProfessionalTemplate({ doc, profile }: PdfTemplateProps) {
                       alt="Logo"
                       style={{ width: 60, height: 60, borderRadius: 999, border: `2px solid ${colors.accent}`, background: '#FFFFFF', objectFit: 'cover' }}
                     />
-                  ) : (
-                    <div style={{ width: 60, height: 60, borderRadius: 999, border: `2px solid ${colors.accent}`, background: 'rgba(255,255,255,0.10)' }} />
-                  )}
+                  ) : null}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ color: '#FFF', fontSize: 30, fontWeight: 900, letterSpacing: -0.4, lineHeight: 1.05 }}>
                       {String(docTitleFromType(doc.type) || 'TAX INVOICE').toUpperCase()}

@@ -31,12 +31,15 @@ masterAdminUsersRouter.get('/', async (req, res, next) => {
     const { search, page = 1, limit = 50 } = req.query;
     const filter = {};
     
-    if (search) {
-      filter.$or = [
-        { email: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-      ];
+    if (search && typeof search === 'string') {
+      const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (escaped) {
+        filter.$or = [
+          { email: { $regex: escaped, $options: 'i' } },
+          { name: { $regex: escaped, $options: 'i' } },
+          { phone: { $regex: escaped, $options: 'i' } },
+        ];
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);

@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { Button } from './ui/button';
 import {
@@ -25,6 +25,8 @@ import {
   Droplet,
   Leaf,
   Flame,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
@@ -67,6 +69,21 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [subscriptionWarning, setSubscriptionWarning] = useState<string | null>(null);
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
   // Start as true if we already have a profile cached — avoids spinner flash on every nav
   const [profileGateChecked, setProfileGateChecked] = useState(() => {
     try {
@@ -531,6 +548,17 @@ export function AppLayout({ children }: AppLayoutProps) {
                 type="button"
                 variant="outline"
                 size="icon"
+                onClick={toggleFullscreen}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                className="h-9 w-9"
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
                 onClick={() => setWalkthroughOpen(true)}
                 aria-label="Open tour"
                 title="Tour"
@@ -605,6 +633,17 @@ export function AppLayout({ children }: AppLayoutProps) {
             <FileText className="h-6 w-6 text-blue-600" />
             <h1 className="text-xl font-bold">BillVyapar</h1>
             <ThemeSwitcher compact />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              className="h-9 w-9"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
             <Button
               type="button"
               variant="outline"

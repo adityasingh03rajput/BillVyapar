@@ -17,12 +17,16 @@ export default defineConfig({
       configureServer(server) {
         return () => {
           server.middlewares.use(async (req, res, next) => {
-            const rawUrl = (req.url ?? '').split('?')[0];
+            const rawUrl = (req.url ?? '').split('?')[0].split('#')[0];
+            // Normalize: remove trailing slash for comparison (except root)
+            const normalized = rawUrl.length > 1 ? rawUrl.replace(/\/$/, '') : rawUrl;
             const isAdminRoute =
-              (rawUrl === '/admin' || rawUrl.startsWith('/admin/')) &&
-              !rawUrl.includes('.');
+              normalized === '/admin' ||
+              normalized.startsWith('/admin/') ||
+              rawUrl.startsWith('/admin/');
 
-            if (!isAdminRoute) return next();
+            // Don't intercept asset/file requests
+            if (!isAdminRoute || rawUrl.includes('.')) return next();
 
             try {
               const adminHtmlPath = path.resolve(__dirname, 'admin.html');

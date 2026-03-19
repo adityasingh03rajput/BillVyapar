@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Plus, Search, User, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
@@ -18,6 +17,7 @@ import {
   normalizePhone,
   validateContactFields,
 } from '../utils/contactValidation';
+import { PhoneInput, EmailInput, GstinInput, PanInput, PostalCodeInput, AddressInput } from '../components/FormattedInputs';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 
@@ -841,28 +841,13 @@ export function CustomersPage() {
                       />
                     </div>
                     <div>
-                      <Label>Email</Label>
-                      <Input
-                        type="email"
+                      <EmailInput
+                        label="Email"
                         value={formData.email || ''}
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          setFormData({ ...formData, email: next });
-                          if (formErrors.email) setFormErrors((p) => ({ ...p, email: undefined }));
-                        }}
-                        onBlur={() => {
-                          const normalized = normalizeEmail(String(formData.email || ''));
-                          if (normalized !== String(formData.email || '')) setFormData((p) => ({ ...p, email: normalized }));
-                          const errs = validateContactFields({
-                            gstin: String(formData.gstin || ''),
-                            phone: String(formData.phone || ''),
-                            email: normalized,
-                          });
-                          setFormErrors((p) => ({ ...p, email: errs.email }));
-                        }}
+                        onChange={(v) => setFormData({ ...formData, email: v })}
                         placeholder="customer@email.com"
+                        error={formErrors.email}
                       />
-                      {formErrors.email ? <div className="text-xs text-destructive mt-1">{formErrors.email}</div> : null}
                     </div>
                   </div>
 
@@ -892,83 +877,34 @@ export function CustomersPage() {
                     </div>
                   </div>
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Phone</Label>
-                    <Input
-                      value={formData.phone || ''}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        setFormData({ ...formData, phone: next });
-                        if (formErrors.phone) setFormErrors((p) => ({ ...p, phone: undefined }));
-                      }}
-                      onBlur={() => {
-                        const normalized = normalizePhone(String(formData.phone || ''));
-                        if (normalized !== String(formData.phone || '')) setFormData((p) => ({ ...p, phone: normalized }));
-                        const errs = validateContactFields({
-                          gstin: String(formData.gstin || ''),
-                          phone: normalized,
-                          email: String(formData.email || ''),
-                        });
-                        setFormErrors((p) => ({ ...p, phone: errs.phone }));
-                      }}
-                      placeholder="+91 99999 99999"
-                    />
-                    {formErrors.phone ? <div className="text-xs text-destructive mt-1">{formErrors.phone}</div> : null}
-                  </div>
-                  <div>
-                    <Label>GSTIN</Label>
-                    <Input
-                      value={formData.gstin || ''}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        setFormData({ ...formData, gstin: next });
-                        if (formErrors.gstin) setFormErrors((p) => ({ ...p, gstin: undefined }));
-                      }}
-                      onBlur={() => {
-                        const normalized = normalizeGstin(String(formData.gstin || ''));
-                        if (normalized !== String(formData.gstin || '')) setFormData((p) => ({ ...p, gstin: normalized }));
-                        const errs = validateContactFields({
-                          gstin: normalized,
-                          phone: String(formData.phone || ''),
-                          email: String(formData.email || ''),
-                        });
-                        setFormErrors((p) => ({ ...p, gstin: errs.gstin }));
-                        void handleGstinLookupAutofill('create');
-                      }}
-                      placeholder="22AAAAA0000A1Z5"
-                    />
-                    {formErrors.gstin ? <div className="text-xs text-destructive mt-1">{formErrors.gstin}</div> : null}
-                    {gstinLookupLoading ? (
-                      <div className="text-xs text-muted-foreground mt-1">Fetching GST details...</div>
-                    ) : null}
-                  </div>
-                </div>
-                <div>
-                  <Label>PAN</Label>
-                  <Input
-                    value={formData.pan || ''}
-                    onChange={(e) => setFormData({...formData, pan: e.target.value})}
-                    placeholder="AAAAA0000A"
+                  <PhoneInput
+                    label="Phone"
+                    value={formData.phone || ''}
+                    onChange={(v) => setFormData({ ...formData, phone: v })}
+                    error={formErrors.phone}
+                  />
+                  <GstinInput
+                    label="GSTIN"
+                    value={formData.gstin || ''}
+                    onChange={(v) => setFormData({ ...formData, gstin: v })}
+                    error={formErrors.gstin}
+                    onBlur={() => void handleGstinLookupAutofill('create')}
                   />
                 </div>
-                <div>
-                  <Label>Billing Address</Label>
-                  <Textarea
-                    value={formData.billingAddress || ''}
-                    onChange={(e) =>
-                      setFormData((p) => {
-                        const billingAddress = e.target.value;
-                        return {
-                          ...p,
-                          billingAddress,
-                          shippingAddress: billingAddress,
-                        };
-                      })
-                    }
-                    placeholder="Enter billing address"
-                    rows={2}
-                  />
-                </div>
+                {gstinLookupLoading ? (
+                  <div className="text-xs text-muted-foreground -mt-2">Fetching GST details...</div>
+                ) : null}
+                <PanInput
+                  label="PAN"
+                  value={formData.pan || ''}
+                  onChange={(v) => setFormData({ ...formData, pan: v })}
+                />
+                <AddressInput
+                  label="Billing Address"
+                  value={formData.billingAddress || ''}
+                  onChange={(v) => setFormData((p) => ({ ...p, billingAddress: v, shippingAddress: v }))}
+                  rows={2}
+                />
 
                 <div>
                   <Label>Logo</Label>
@@ -1047,16 +983,9 @@ export function CustomersPage() {
                   </div>
                   <div>
                     <Label>Billing Postal Code</Label>
-                    <Input
+                    <PostalCodeInput
                       value={formData.billingPostalCode || ''}
-                      onChange={(e) =>
-                        setFormData((p) => ({
-                          ...p,
-                          billingPostalCode: e.target.value,
-                          shippingPostalCode: e.target.value,
-                        }))
-                      }
-                      placeholder="560001"
+                      onChange={(v) => setFormData((p) => ({ ...p, billingPostalCode: v, shippingPostalCode: v }))}
                     />
                   </div>
                 </div>
@@ -1274,111 +1203,47 @@ export function CustomersPage() {
                   />
                 </div>
                 <div>
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
+                  <EmailInput
+                    label="Email"
                     value={editFormData.email || ''}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setEditFormData({ ...editFormData, email: next });
-                      if (editFormErrors.email) setEditFormErrors((p) => ({ ...p, email: undefined }));
-                    }}
-                    onBlur={() => {
-                      const normalized = normalizeEmail(String(editFormData.email || ''));
-                      if (normalized !== String(editFormData.email || '')) setEditFormData((p) => ({ ...p, email: normalized }));
-                      const errs = validateContactFields({
-                        gstin: String(editFormData.gstin || ''),
-                        phone: String(editFormData.phone || ''),
-                        email: normalized,
-                      });
-                      setEditFormErrors((p) => ({ ...p, email: errs.email }));
-                    }}
+                    onChange={(v) => setEditFormData({ ...editFormData, email: v })}
                     placeholder="customer@email.com"
+                    error={editFormErrors.email}
                   />
-                  {editFormErrors.email ? <div className="text-xs text-destructive mt-1">{editFormErrors.email}</div> : null}
                 </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Phone</Label>
-                  <Input
-                    value={editFormData.phone || ''}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setEditFormData({ ...editFormData, phone: next });
-                      if (editFormErrors.phone) setEditFormErrors((p) => ({ ...p, phone: undefined }));
-                    }}
-                    onBlur={() => {
-                      const normalized = normalizePhone(String(editFormData.phone || ''));
-                      if (normalized !== String(editFormData.phone || '')) setEditFormData((p) => ({ ...p, phone: normalized }));
-                      const errs = validateContactFields({
-                        gstin: String(editFormData.gstin || ''),
-                        phone: normalized,
-                        email: String(editFormData.email || ''),
-                      });
-                      setEditFormErrors((p) => ({ ...p, phone: errs.phone }));
-                    }}
-                    placeholder="+91 99999 99999"
-                  />
-                  {editFormErrors.phone ? <div className="text-xs text-destructive mt-1">{editFormErrors.phone}</div> : null}
-                </div>
-                <div>
-                  <Label>GSTIN</Label>
-                  <Input
-                    value={editFormData.gstin || ''}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setEditFormData({ ...editFormData, gstin: next });
-                      if (editFormErrors.gstin) setEditFormErrors((p) => ({ ...p, gstin: undefined }));
-                    }}
-                    onBlur={() => {
-                      const normalized = normalizeGstin(String(editFormData.gstin || ''));
-                      if (normalized !== String(editFormData.gstin || '')) setEditFormData((p) => ({ ...p, gstin: normalized }));
-                      const errs = validateContactFields({
-                        gstin: normalized,
-                        phone: String(editFormData.phone || ''),
-                        email: String(editFormData.email || ''),
-                      });
-                      setEditFormErrors((p) => ({ ...p, gstin: errs.gstin }));
-                      void handleGstinLookupAutofill('edit');
-                    }}
-                    placeholder="22AAAAA0000A1Z5"
-                  />
-                  {editFormErrors.gstin ? <div className="text-xs text-destructive mt-1">{editFormErrors.gstin}</div> : null}
-                  {gstinLookupLoading ? (
-                    <div className="text-xs text-muted-foreground mt-1">Fetching GST details...</div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div>
-                <Label>PAN</Label>
-                <Input
-                  value={editFormData.pan || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, pan: e.target.value })}
-                  placeholder="AAAAA0000A"
+                <PhoneInput
+                  label="Phone"
+                  value={editFormData.phone || ''}
+                  onChange={(v) => setEditFormData({ ...editFormData, phone: v })}
+                  error={editFormErrors.phone}
+                />
+                <GstinInput
+                  label="GSTIN"
+                  value={editFormData.gstin || ''}
+                  onChange={(v) => setEditFormData({ ...editFormData, gstin: v })}
+                  error={editFormErrors.gstin}
+                  onBlur={() => void handleGstinLookupAutofill('edit')}
                 />
               </div>
+              {gstinLookupLoading ? (
+                <div className="text-xs text-muted-foreground -mt-2">Fetching GST details...</div>
+              ) : null}
 
-              <div>
-                <Label>Billing Address</Label>
-                <Textarea
-                  value={editFormData.billingAddress || ''}
-                  onChange={(e) =>
-                    setEditFormData((p) => {
-                      const billingAddress = e.target.value;
-                      return {
-                        ...p,
-                        billingAddress,
-                        shippingAddress: billingAddress,
-                      };
-                    })
-                  }
-                  placeholder="Enter billing address"
-                  rows={2}
-                />
-              </div>
+              <PanInput
+                label="PAN"
+                value={editFormData.pan || ''}
+                onChange={(v) => setEditFormData({ ...editFormData, pan: v })}
+              />
+
+              <AddressInput
+                label="Billing Address"
+                value={editFormData.billingAddress || ''}
+                onChange={(v) => setEditFormData((p) => ({ ...p, billingAddress: v, shippingAddress: v }))}
+                rows={2}
+              />
 
               <div className="grid md:grid-cols-3 gap-4">
                 <div>
@@ -1421,16 +1286,9 @@ export function CustomersPage() {
                 </div>
                 <div>
                   <Label>Billing Postal Code</Label>
-                  <Input
+                  <PostalCodeInput
                     value={editFormData.billingPostalCode || ''}
-                    onChange={(e) =>
-                      setEditFormData((p) => ({
-                        ...p,
-                        billingPostalCode: e.target.value,
-                        shippingPostalCode: e.target.value,
-                      }))
-                    }
-                    placeholder="560001"
+                    onChange={(v) => setEditFormData((p) => ({ ...p, billingPostalCode: v, shippingPostalCode: v }))}
                   />
                 </div>
               </div>

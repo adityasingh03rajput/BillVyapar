@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider, useNavigate, Outlet } from 'react-router';
+import { createBrowserRouter, RouterProvider, useNavigate, Outlet, Navigate } from 'react-router';
 import { Toaster } from './app/components/ui/sonner';
 import { ThemeProvider } from './app/contexts/ThemeContext';
 import { MasterAdminLoginPage } from './app/pages/MasterAdmin/LoginPage';
@@ -17,6 +17,21 @@ import './styles/index.css';
 
 localStorage.removeItem('apiUrlOverride');
 
+function RouterError() {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <p className="text-6xl font-bold text-gray-300 mb-4">Oops</p>
+        <p className="text-gray-600 mb-6">Something went wrong</p>
+        <button onClick={() => navigate('/dashboard')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
+          Go to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NotFound() {
   const navigate = useNavigate();
   return (
@@ -32,8 +47,10 @@ function NotFound() {
   );
 }
 
-// Layout wrapper — all protected routes render inside ConsoleLayout
-function AdminLayout() {
+// Redirect to login if no token is stored
+function RequireAuth() {
+  const token = localStorage.getItem('masterAdminToken');
+  if (!token) return <Navigate to="/" replace />;
   return (
     <ConsoleLayout>
       <Outlet />
@@ -41,10 +58,18 @@ function AdminLayout() {
   );
 }
 
+// Redirect already-logged-in admins away from the login page
+function GuestOnly() {
+  const token = localStorage.getItem('masterAdminToken');
+  if (token) return <Navigate to="/dashboard" replace />;
+  return <MasterAdminLoginPage />;
+}
+
 const router = createBrowserRouter([
-  { path: '/', Component: MasterAdminLoginPage },
+  { path: '/', Component: GuestOnly, errorElement: <RouterError /> },
   {
-    Component: AdminLayout,
+    Component: RequireAuth,
+    errorElement: <RouterError />,
     children: [
       { path: '/dashboard',        Component: MasterAdminDashboardPage },
       { path: '/subscribers',      Component: MasterAdminSubscribersPage },
@@ -57,6 +82,7 @@ const router = createBrowserRouter([
       { path: '*',                 Component: NotFound },
     ],
   },
+  { path: '*', Component: NotFound },
 ], { basename: '/admin' });
 
 createRoot(document.getElementById('root')!).render(

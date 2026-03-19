@@ -14,6 +14,7 @@ export function AuthPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+91');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -64,12 +65,45 @@ export function AuthPage() {
     if (apiEditOpen) setApiDraft(API_URL);
   }, [apiEditOpen]);
 
+  // Force full-screen: remove any max-width constraints from html/body/#root
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.id = 'auth-fullscreen';
+    style.textContent = `
+      html, body, #root {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.getElementById('auth-fullscreen')?.remove(); };
+  }, []);
+
+  const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const requestFullscreen = () => {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+
+  const exitFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  };
+
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0f172a' }}>
-        <div className="flex flex-col items-center gap-3">
-          <FileText className="h-12 w-12 text-blue-400 animate-pulse" />
-          <span className="text-lg font-bold text-white">BillVyapar</span>
+      <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fdf9f0' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <FileText style={{ width: 48, height: 48, color: '#1f4ed8', animation: 'pulse 1.5s infinite' }} />
+          <span style={{ fontSize: 22, fontWeight: 700, fontFamily: 'Newsreader, serif', color: '#1c1c17' }}>BillVyapar</span>
         </div>
       </div>
     );
@@ -108,11 +142,8 @@ export function AuthPage() {
         const normalizePhone = (raw: string) => {
           const v = String(raw || '').trim();
           if (!v) return v;
-          if (v.startsWith('+')) return v;
           const digits = v.replace(/\D/g, '');
-          if (digits.length === 10) return `+91${digits}`;
-          if (digits.length >= 8 && digits.length <= 15) return `+${digits}`;
-          return v;
+          return `${phoneCountryCode}${digits}`;
         };
         await signUp(email, password, name, normalizePhone(phone));
         toast.success('Account created successfully!');
@@ -158,89 +189,212 @@ export function AuthPage() {
     : backendOnline ? 'Online' : backendOnline === false && checkingBackend ? 'Reconnecting…'
     : backendOnline === false ? 'Offline' : '…';
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '11px 14px',
+    borderRadius: 6,
+    border: '1px solid rgba(0,0,0,0.15)',
+    background: 'rgba(255,255,255,0.55)',
+    color: '#1a1a14',
+    fontSize: 14,
+    fontFamily: 'Manrope, sans-serif',
+    outline: 'none',
+    transition: 'background 0.2s, border-color 0.2s',
+    backdropFilter: 'blur(4px)',
+    boxSizing: 'border-box',
+  };
+
+  const title = mode === 'auth'
+    ? (isSignUp ? 'Create Account' : 'Welcome Back')
+    : mode === 'forgot' ? 'Forgot Password' : 'Reset Password';
+
+  const subtitle = mode === 'auth'
+    ? (isSignUp ? 'Start managing your business' : 'Sign in to your dashboard')
+    : mode === 'forgot' ? 'Enter your email to receive an OTP'
+    : 'Enter the OTP and your new password';
+
+  const btnLabel = loading ? 'Please wait…'
+    : mode === 'forgot' ? 'Send OTP'
+    : mode === 'reset' ? 'Reset Password'
+    : isSignUp ? 'Create Account' : 'Sign In';
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #0f2027 100%)' }}>
+    <div style={{
+      position: 'fixed', inset: 0,
+      display: 'flex', flexDirection: 'column',
+      fontFamily: 'Manrope, sans-serif',
+      backgroundImage: 'url(/background.png)',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      overflowY: 'auto',
+      width: '100vw',
+      height: '100vh',
+      maxWidth: 'none',
+    }}>
 
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 text-xs" style={{ color: '#64748b' }}>
-        <span className="truncate max-w-[60%]">
-          {API_URL}{apiOverrideActive ? ' (custom)' : ''}
-          {!apiEditOpen && (
-            <button type="button" className="ml-1 underline" style={{ color: '#6366f1' }} onClick={() => setApiEditOpen(true)}>edit</button>
-          )}
-        </span>
-        <span className="font-semibold flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full inline-block" style={{ background: statusColor }} />
-          {statusText}
-        </span>
-      </div>
-      {apiEditOpen && (
-        <div className="flex items-center gap-2 px-4 pb-3">
-          <input value={apiDraft} onChange={e => setApiDraft(e.target.value)} placeholder="https://your-backend.com"
-            className="flex-1 px-3 py-1.5 rounded-lg text-xs outline-none"
-            style={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0' }} />
-          <button type="button" onClick={() => { const n = setApiUrlOverride(apiDraft); toast.success(`API → ${n}`); window.location.reload(); }}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold" style={{ background: '#6366f1', color: '#fff' }}>Save</button>
-          <button type="button" onClick={() => setApiEditOpen(false)}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold" style={{ background: '#334155', color: '#94a3b8' }}>✕</button>
-          <button type="button" onClick={() => { clearApiUrlOverride(); toast.success('Reset'); window.location.reload(); }}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold" style={{ background: '#334155', color: '#94a3b8' }}>Reset</button>
+      {/* Fullscreen corner button */}
+      <button
+        type="button"
+        title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        onClick={isFullscreen ? exitFullscreen : requestFullscreen}
+        style={{
+          position: 'fixed', bottom: 16, right: 16, zIndex: 200,
+          background: 'rgba(0,0,0,0.35)', color: '#fff',
+          border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 8, padding: '8px', cursor: 'pointer',
+          backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: 0.7, transition: 'opacity 0.2s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+        onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
+      >
+        {isFullscreen ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+            <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V3h4"/><path d="M17 3h4v4"/><path d="M21 17v4h-4"/><path d="M7 21H3v-4"/>
+          </svg>
+        )}
+      </button>
+
+      {/* Nav — fully transparent */}
+      <nav style={{ position: 'sticky', top: 0, zIndex: 50, background: 'transparent' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '14px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'Newsreader, serif', fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.3px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>BillVyapar</span>
+          <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+            {['Features', 'Pricing', 'About'].map(l => (
+              <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: 500, textDecoration: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{l}</a>
+            ))}
+            <button
+              type="button"
+              onClick={() => { setMode('auth'); setIsSignUp(false); }}
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 999, padding: '7px 20px', fontWeight: 600, fontSize: 14, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+            >
+              Sign In
+            </button>
+          </div>
         </div>
-      )}
+      </nav>
 
-      {/* Hero */}
-      <div className="flex flex-col items-center pt-8 pb-6 px-6">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-          style={{ background: 'linear-gradient(135deg, #6366f1, #3b82f6)', boxShadow: '0 8px 32px rgba(99,102,241,0.4)' }}>
-          <FileText className="h-8 w-8 text-white" />
-        </div>
-        <h1 className="text-3xl font-black text-white tracking-tight">BillVyapar</h1>
-        <p className="text-sm mt-1 font-medium" style={{ color: '#94a3b8' }}>Business Billing &amp; Documentation</p>
+      {/* Main — no extra overlay, background shows through */}
+      <main style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '32px 16px',
+      }}>
+        {/* Card — glass over the open book */}
+        <div style={{
+          width: '100%', maxWidth: 500,
+          background: 'rgba(255,252,240,0.55)',
+          backdropFilter: 'blur(2px)',
+          WebkitBackdropFilter: 'blur(2px)',
+          borderRadius: 4,
+          border: '1px solid rgba(255,255,255,0.18)',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+          padding: '36px 44px',
+          position: 'relative',
+        }}>
 
-        {/* Pill badges */}
-        <div className="flex gap-2 mt-4 flex-wrap justify-center">
-          {['GST Invoices', 'Multi-Business', 'Offline Ready'].map(t => (
-            <span key={t} className="text-xs px-3 py-1 rounded-full font-semibold"
-              style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }}>
-              {t}
+          {/* Logo block */}
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            {/* Icon */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg, #4f7df3, #2350db)', boxShadow: '0 4px 16px rgba(31,78,216,0.35)', marginBottom: 12 }}>
+              <FileText style={{ width: 26, height: 26, color: '#fff' }} />
+            </div>
+            <h1 style={{ fontFamily: 'Newsreader, serif', fontSize: 30, fontWeight: 700, color: '#1a1a14', margin: 0, letterSpacing: '-0.3px' }}>BillVyapar</h1>
+            <p style={{ fontFamily: 'Newsreader, serif', fontStyle: 'italic', fontSize: 14, color: '#4a4a3a', margin: '4px 0 0' }}>Business Billing &amp; Documentation</p>
+            {/* Feature tags */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 14 }}>
+              {[{ label: 'GST Invoices', rot: '-1deg' }, { label: 'Multi-Business', rot: '2deg' }, { label: 'Offline Ready', rot: '-2deg' }].map(({ label, rot }) => (
+                <span key={label} style={{
+                  padding: '3px 11px', background: 'rgba(255,255,255,0.45)', color: '#3a3a2a',
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                  borderRadius: 999, border: '1px solid rgba(0,0,0,0.12)', transform: `rotate(${rot})`,
+                  display: 'inline-block',
+                }}>{label}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Form heading */}
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <h2 style={{ fontFamily: 'Newsreader, serif', fontSize: 22, fontWeight: 600, color: '#1a1a14', margin: 0 }}>{title}</h2>
+            <p style={{ fontSize: 13, color: '#5a5a4a', margin: '3px 0 0' }}>{subtitle}</p>
+          </div>
+
+          {/* API status bar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, fontSize: 11, color: '#6a6a5a' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>
+              {API_URL}{apiOverrideActive ? ' (custom)' : ''}
+              {!apiEditOpen && (
+                <button type="button" style={{ marginLeft: 4, color: '#1f4ed8', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, textDecoration: 'underline', padding: 0 }}
+                  onClick={() => setApiEditOpen(true)}>edit</button>
+              )}
             </span>
-          ))}
-        </div>
-      </div>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
+              {statusText}
+            </span>
+          </div>
 
-      {/* Form card */}
-      <div className="flex-1 flex flex-col justify-start px-5">
-        <div className="rounded-3xl p-6" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
-          <h2 className="text-lg font-black text-white mb-1">
-            {mode === 'auth' ? (isSignUp ? 'Create Account' : 'Welcome Back') : mode === 'forgot' ? 'Forgot Password' : 'Reset Password'}
-          </h2>
-          <p className="text-xs mb-5" style={{ color: '#64748b' }}>
-            {mode === 'auth' ? (isSignUp ? 'Start managing your business' : 'Sign in to your dashboard') : mode === 'forgot' ? 'Enter your email to get an OTP' : 'Enter OTP and new password'}
-          </p>
+          {apiEditOpen && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+              <input value={apiDraft} onChange={e => setApiDraft(e.target.value)} placeholder="https://your-backend.com"
+                style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.15)', background: 'rgba(255,255,255,0.5)', fontSize: 12, color: '#1a1a14', outline: 'none' }} />
+              <button type="button" onClick={() => { const n = setApiUrlOverride(apiDraft); toast.success(`API → ${n}`); window.location.reload(); }}
+                style={{ padding: '7px 12px', borderRadius: 6, background: '#3b6ef5', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Save</button>
+              <button type="button" onClick={() => setApiEditOpen(false)}
+                style={{ padding: '7px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.1)', color: '#3a3a2a', border: 'none', fontSize: 12, cursor: 'pointer' }}>✕</button>
+              <button type="button" onClick={() => { clearApiUrlOverride(); toast.success('Reset'); window.location.reload(); }}
+                style={{ padding: '7px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.1)', color: '#3a3a2a', border: 'none', fontSize: 12, cursor: 'pointer' }}>Reset</button>
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Form */}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
             {mode === 'auth' && isSignUp && (
-              <input type="text" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} required
-                className="w-full px-4 py-3 rounded-xl text-sm outline-none font-medium"
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4a3a' }}>Full Name</label>
+                <input type="text" placeholder="Your full name" value={name} onChange={e => setName(e.target.value)} required style={inputStyle} />
+              </div>
             )}
+
             {mode === 'auth' && isSignUp && (
-              <input type="tel" placeholder="Phone (+91XXXXXXXXXX)" value={phone} onChange={e => setPhone(e.target.value)} required
-                className="w-full px-4 py-3 rounded-xl text-sm outline-none font-medium"
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4a3a' }}>Phone</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select value={phoneCountryCode} onChange={e => setPhoneCountryCode(e.target.value)}
+                    style={{ ...inputStyle, width: 'auto', minWidth: 80 }} aria-label="Country code">
+                    {['+91','+1','+44','+61','+971','+65','+60','+49','+33','+81','+86','+7','+55','+27','+92','+880','+94','+977'].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <input type="tel" inputMode="numeric" placeholder="Phone number" value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 15))} required
+                    style={{ ...inputStyle, flex: 1 }} />
+                </div>
+              </div>
             )}
-            <input type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} required
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none font-medium"
-              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }} />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4a3a' }}>Email address</label>
+              <input type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} required style={inputStyle} />
+            </div>
 
             {mode === 'forgot' && (
               <div>
-                <p className="text-xs mb-2" style={{ color: '#94a3b8' }}>Send OTP via</p>
+                <p style={{ fontSize: 12, color: '#747686', marginBottom: 8 }}>Send OTP via</p>
                 <RadioGroup value={otpChannel} onValueChange={v => setOtpChannel(v as any)} className="flex gap-4">
                   {(['sms', 'email', 'both'] as const).map(v => (
                     <div key={v} className="flex items-center gap-1.5">
                       <RadioGroupItem value={v} id={`otp-${v}`} />
-                      <Label htmlFor={`otp-${v}`} className="text-xs capitalize" style={{ color: '#94a3b8' }}>{v}</Label>
+                      <Label htmlFor={`otp-${v}`} style={{ fontSize: 12, color: '#434655', textTransform: 'capitalize' }}>{v}</Label>
                     </div>
                   ))}
                 </RadioGroup>
@@ -248,51 +402,82 @@ export function AuthPage() {
             )}
 
             {mode === 'auth' && (
-              <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
-                autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                className="w-full px-4 py-3 rounded-xl text-sm outline-none font-medium"
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4a3a' }}>Password</label>
+                  {!isSignUp && (
+                    <button type="button" onClick={() => setMode('forgot')}
+                      style={{ fontSize: 12, fontWeight: 600, color: '#2350db', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'} style={inputStyle} />
+              </div>
             )}
 
             {mode === 'reset' && (
               <>
-                <input type="text" placeholder="OTP" value={otp} onChange={e => setOtp(e.target.value)} required
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none font-medium"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }} />
-                <input type="password" placeholder="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6}
-                  autoComplete="new-password"
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none font-medium"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4a3a' }}>OTP</label>
+                  <input type="text" placeholder="Enter OTP" value={otp} onChange={e => setOtp(e.target.value)} required style={inputStyle} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4a3a' }}>New Password</label>
+                  <input type="password" placeholder="New password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6}
+                    autoComplete="new-password" style={inputStyle} />
+                </div>
               </>
             )}
 
-            <button type="submit" disabled={loading}
-              className="w-full py-3.5 rounded-xl text-sm font-black transition-all mt-1"
-              style={{ background: loading ? '#334155' : 'linear-gradient(135deg, #6366f1, #3b82f6)', color: '#fff', boxShadow: loading ? 'none' : '0 4px 20px rgba(99,102,241,0.4)' }}>
-              {loading ? 'Please wait…' : mode === 'forgot' ? 'Send OTP' : mode === 'reset' ? 'Reset Password' : isSignUp ? 'Create Account' : 'Sign In'}
+            <button type="submit" disabled={loading} style={{
+              width: '100%', padding: '13px', marginTop: 4,
+              background: loading ? 'rgba(100,120,200,0.4)' : 'linear-gradient(90deg, #3b6ef5, #5585ff)',
+              color: '#fff', border: 'none', borderRadius: 6,
+              fontWeight: 700, fontSize: 15, cursor: loading ? 'not-allowed' : 'pointer',
+              boxShadow: loading ? 'none' : '0 4px 16px rgba(59,110,245,0.4)',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+              fontFamily: 'Manrope, sans-serif',
+              letterSpacing: '0.02em',
+            }}>
+              {btnLabel}
             </button>
           </form>
 
-          <div className="flex flex-col items-center gap-2 mt-4">
-            {mode === 'auth' && !isSignUp && (
-              <button type="button" onClick={() => setMode('forgot')} className="text-xs font-semibold" style={{ color: '#6366f1' }}>
-                Forgot password?
-              </button>
-            )}
+          {/* Footer links */}
+          <div style={{ textAlign: 'center', marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {mode !== 'auth' && (
-              <button type="button" onClick={() => setMode('auth')} className="text-xs font-semibold" style={{ color: '#6366f1' }}>
+              <button type="button" onClick={() => setMode('auth')}
+                style={{ fontSize: 13, fontWeight: 600, color: '#2350db', background: 'none', border: 'none', cursor: 'pointer' }}>
                 ← Back to sign in
               </button>
             )}
-            <button type="button" onClick={() => { setMode('auth'); setIsSignUp(!isSignUp); }}
-              className="text-xs font-semibold" style={{ color: '#94a3b8' }}>
-              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-            </button>
+            <p style={{ fontSize: 13, color: '#4a4a3a', margin: 0 }}>
+              {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+              <button type="button" onClick={() => { setMode('auth'); setIsSignUp(!isSignUp); }}
+                style={{ fontFamily: 'Newsreader, serif', fontStyle: 'italic', fontWeight: 700, color: '#2350db', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>
+                {isSignUp ? 'Sign in' : 'Sign up'}
+              </button>
+            </p>
+          </div>
+
+          {/* Decorative stamp */}
+          <div style={{ position: 'absolute', bottom: -24, right: -24, opacity: 0.15, pointerEvents: 'none', transform: 'rotate(12deg)' }}>
+            <div style={{ border: '4px solid #77574d', padding: '12px 14px', borderRadius: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'Newsreader, serif', fontSize: 26, fontWeight: 900, color: '#77574d', letterSpacing: '-1px', lineHeight: 1 }}>VERIFIED</span>
+              <span style={{ fontSize: 8, fontWeight: 700, color: '#77574d', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Official Ledger Entry</span>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
 
-      <div className="py-6 text-center text-xs" style={{ color: '#334155' }}>© 2025 BillVyapar</div>
+      {/* Footer — transparent */}
+      <footer style={{ background: 'transparent' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '16px 32px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', margin: 0, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>© 2025 BillVyapar</p>
+        </div>
+      </footer>
     </div>
   );
 }

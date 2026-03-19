@@ -9,16 +9,30 @@ export const masterAdminAuthRouter = Router();
 masterAdminAuthRouter.post('/signin', async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
-    if (!email || !password) {
+
+    // Reject non-string inputs — prevents NoSQL injection via objects like { "$gt": "" }
+    if (typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const admin = await MasterAdmin.findOne({ email: String(email).toLowerCase() });
+    const sanitizedEmail = email.trim().toLowerCase();
+    const sanitizedPassword = password.trim();
+
+    if (!sanitizedEmail || !sanitizedPassword) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Basic email format check to avoid regex-based lookups on garbage input
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizedEmail)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const admin = await MasterAdmin.findOne({ email: sanitizedEmail });
     if (!admin || admin.status !== 'active') {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const valid = await bcrypt.compare(String(password), admin.passwordHash);
+    const valid = await bcrypt.compare(sanitizedPassword, admin.passwordHash);
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
