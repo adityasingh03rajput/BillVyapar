@@ -163,16 +163,16 @@ export function ProjectsPage() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4 sm:space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <FolderKanban className="h-7 w-7 text-indigo-600" />
+          <FolderKanban className="h-7 w-7 text-indigo-600 shrink-0" />
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Projects</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Projects</h1>
             <p className="text-sm text-muted-foreground">Group tasks and assign teams to projects</p>
           </div>
         </div>
-        <Button onClick={openCreate} className="gap-2"><Plus className="h-4 w-4" /> New Project</Button>
+        <Button onClick={openCreate} className="gap-2 shrink-0"><Plus className="h-4 w-4" /> New Project</Button>
       </div>
 
       {loading ? (
@@ -225,7 +225,7 @@ export function ProjectsPage() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 flex-wrap">
                       <Button variant="ghost" size="icon" onClick={() => setTaskDialog(proj._id)} title="Add task"><Plus className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(proj)} title="Edit"><Pencil className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => deleteProject(proj._id)} title="Delete"><Trash2 className="h-4 w-4" /></Button>

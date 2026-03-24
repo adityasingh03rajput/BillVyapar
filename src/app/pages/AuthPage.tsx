@@ -236,6 +236,7 @@ export function AuthPage() {
       backgroundImage: 'url(/background.png)',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
+      backgroundColor: '#2a3a5c',
       overflowY: 'auto',
       width: '100vw',
       height: '100vh',
@@ -272,11 +273,11 @@ export function AuthPage() {
 
       {/* Nav — fully transparent */}
       <nav style={{ position: 'sticky', top: 0, zIndex: 50, background: 'transparent' }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '14px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontFamily: 'Newsreader, serif', fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.3px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>BillVyapar</span>
-          <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {['Features', 'Pricing', 'About'].map(l => (
-              <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: 500, textDecoration: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{l}</a>
+              <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 500, textDecoration: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.4)', display: 'none' } as React.CSSProperties}>{l}</a>
             ))}
             <button
               type="button"
@@ -295,7 +296,7 @@ export function AuthPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '32px 16px',
+        padding: 'clamp(16px, 4vw, 32px) 16px',
       }}>
         {/* Card — glass over the open book */}
         <div style={{
@@ -306,7 +307,7 @@ export function AuthPage() {
           borderRadius: 4,
           border: '1px solid rgba(255,255,255,0.18)',
           boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
-          padding: '36px 44px',
+          padding: 'clamp(20px, 5vw, 36px) clamp(16px, 6vw, 44px)',
           position: 'relative',
         }}>
 
@@ -316,7 +317,7 @@ export function AuthPage() {
             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg, #4f7df3, #2350db)', boxShadow: '0 4px 16px rgba(31,78,216,0.35)', marginBottom: 12 }}>
               <FileText style={{ width: 26, height: 26, color: '#fff' }} />
             </div>
-            <h1 style={{ fontFamily: 'Newsreader, serif', fontSize: 30, fontWeight: 700, color: '#1a1a14', margin: 0, letterSpacing: '-0.3px' }}>BillVyapar</h1>
+            <h1 style={{ fontFamily: 'Newsreader, serif', fontSize: 'clamp(22px, 6vw, 30px)', fontWeight: 700, color: '#1a1a14', margin: 0, letterSpacing: '-0.3px' }}>BillVyapar</h1>
             <p style={{ fontFamily: 'Newsreader, serif', fontStyle: 'italic', fontSize: 14, color: '#4a4a3a', margin: '4px 0 0' }}>Business Billing &amp; Documentation</p>
             {/* Feature tags */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 14 }}>
@@ -520,7 +521,7 @@ export function AuthPage() {
 
       {/* Footer — transparent */}
       <footer style={{ background: 'transparent' }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '16px 32px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '16px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', margin: 0, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>© 2025 BillVyapar</p>
         </div>
       </footer>

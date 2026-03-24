@@ -321,13 +321,13 @@ export function EmployeesPage() {
         ) : null}      </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-muted rounded-lg p-1 overflow-x-auto">
         {(['employees', 'roles', 'attendance', 'projects'] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`px-5 py-2 rounded-md text-sm font-semibold transition-all capitalize ${
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-all whitespace-nowrap shrink-0 capitalize ${
               tab === t ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -355,45 +355,71 @@ export function EmployeesPage() {
               <p className="text-sm mt-1">Add your first employee to get started</p>
             </div>
           ) : (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Name</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Email</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Role</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {employees.map((emp) => (
-                    <tr key={emp._id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground">{emp.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{emp.email}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${roleBadgeColor(emp, customRoles)}`}>
+            <>
+              {/* Mobile card list */}
+              <div className="flex flex-col gap-3 sm:hidden">
+                {employees.map((emp) => (
+                  <div key={emp._id} className="rounded-xl border border-border p-4 flex items-start justify-between gap-3 bg-card">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground truncate">{emp.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{emp.email}</p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleBadgeColor(emp, customRoles)}`}>
                           {roleDisplayName(emp, customRoles)}
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button type="button" onClick={() => handleToggleActive(emp)} title={emp.isActive ? 'Click to deactivate' : 'Click to activate'}>
-                          <Badge variant={emp.isActive ? 'default' : 'secondary'}>
-                            {emp.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
+                        <button type="button" onClick={() => handleToggleActive(emp)}>
+                          <Badge variant={emp.isActive ? 'default' : 'secondary'}>{emp.isActive ? 'Active' : 'Inactive'}</Badge>
                         </button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => openEditEmp(emp)} title="Edit"><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => setDeleteEmp(emp)} title="Delete"><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      </td>
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" onClick={() => openEditEmp(emp)}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => setDeleteEmp(emp)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block rounded-xl border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Name</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Email</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Role</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+                      <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {employees.map((emp) => (
+                      <tr key={emp._id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-medium text-foreground">{emp.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{emp.email}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${roleBadgeColor(emp, customRoles)}`}>
+                            {roleDisplayName(emp, customRoles)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button type="button" onClick={() => handleToggleActive(emp)} title={emp.isActive ? 'Click to deactivate' : 'Click to activate'}>
+                            <Badge variant={emp.isActive ? 'default' : 'secondary'}>
+                              {emp.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => openEditEmp(emp)} title="Edit"><Pencil className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => setDeleteEmp(emp)} title="Delete"><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </>
       )}

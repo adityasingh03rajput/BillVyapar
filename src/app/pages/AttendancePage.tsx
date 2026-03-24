@@ -497,7 +497,7 @@ export function AttendancePage() {
   const absent = todaySummary ? todaySummary.totalEmployees - todaySummary.present : 0;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
       <div className="flex items-center gap-3">
         <CalendarDays className="h-7 w-7 text-blue-600" />
         <div>
@@ -507,10 +507,10 @@ export function AttendancePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-muted rounded-lg p-1 overflow-x-auto">
         {(['today', 'history', 'tracking'] as const).map((t) => (
           <button key={t} type="button" onClick={() => setTab(t)}
-            className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${tab === t ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${tab === t ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
             {t === 'today' ? "Today's Summary" : t === 'history' ? 'Monthly History' : (
               <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />Live Tracking</span>
             )}
@@ -546,25 +546,48 @@ export function AttendancePage() {
                   <p className="font-medium">No check-ins yet today</p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-border overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Employee</th>
-                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-in</th>
-                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-out</th>
-                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Time Spent / KM</th>
-                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
-                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Tasks</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {todaySummary.records.map((r) => (
-                        <AttendanceRow key={r._id} r={r} headers={headers} onTasksUpdated={handleTasksUpdated} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  {/* Mobile cards */}
+                  <div className="flex flex-col gap-3 sm:hidden">
+                    {todaySummary.records.map((r) => (
+                      <div key={r._id} className="rounded-xl border border-border p-4 bg-card space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-foreground">{r.employeeId?.name ?? '—'}</p>
+                          <StatusBadge status={r.status} />
+                        </div>
+                        <p className="text-xs text-muted-foreground">{r.employeeId?.email}</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div><span className="text-xs text-muted-foreground block">Check-in</span>{fmtTime(r.checkInTime)}</div>
+                          <div><span className="text-xs text-muted-foreground block">Check-out</span>{fmtTime(r.checkOutTime)}</div>
+                        </div>
+                        {(r.totalKm > 0 || calcTimeSpent(r.checkInTime, r.checkOutTime) !== '—') && (
+                          <p className="text-xs text-muted-foreground">{calcTimeSpent(r.checkInTime, r.checkOutTime)}{r.totalKm > 0 ? ` · ${r.totalKm.toFixed(2)} km` : ''}</p>
+                        )}
+                        {r.tasks?.length > 0 && <p className="text-xs text-muted-foreground">{r.tasks.length} task{r.tasks.length !== 1 ? 's' : ''}</p>}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block rounded-xl border border-border overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Employee</th>
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-in</th>
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-out</th>
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Time Spent / KM</th>
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Tasks</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {todaySummary.records.map((r) => (
+                          <AttendanceRow key={r._id} r={r} headers={headers} onTasksUpdated={handleTasksUpdated} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </>
           )}
@@ -592,26 +615,51 @@ export function AttendancePage() {
               <p className="font-medium">No records for this month</p>
             </div>
           ) : (
-            <div className="rounded-xl border border-border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Employee</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-in</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-out</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Time Spent / KM</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Tasks</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {records.map((r) => (
-                    <AttendanceRow key={r._id} r={r} headers={headers} onTasksUpdated={handleTasksUpdated} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* Mobile cards */}
+              <div className="flex flex-col gap-3 sm:hidden">
+                {records.map((r) => (
+                  <div key={r._id} className="rounded-xl border border-border p-4 bg-card space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-foreground">{r.employeeId?.name ?? '—'}</p>
+                        <p className="text-xs text-muted-foreground">{r.date}</p>
+                      </div>
+                      <StatusBadge status={r.status} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="text-xs text-muted-foreground block">Check-in</span>{fmtTime(r.checkInTime)}</div>
+                      <div><span className="text-xs text-muted-foreground block">Check-out</span>{fmtTime(r.checkOutTime)}</div>
+                    </div>
+                    {(r.totalKm > 0 || calcTimeSpent(r.checkInTime, r.checkOutTime) !== '—') && (
+                      <p className="text-xs text-muted-foreground">{calcTimeSpent(r.checkInTime, r.checkOutTime)}{r.totalKm > 0 ? ` · ${r.totalKm.toFixed(2)} km` : ''}</p>
+                    )}
+                    {r.tasks?.length > 0 && <p className="text-xs text-muted-foreground">{r.tasks.length} task{r.tasks.length !== 1 ? 's' : ''}</p>}
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block rounded-xl border border-border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Employee</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-in</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Check-out</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Time Spent / KM</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Tasks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {records.map((r) => (
+                      <AttendanceRow key={r._id} r={r} headers={headers} onTasksUpdated={handleTasksUpdated} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </>
       )}

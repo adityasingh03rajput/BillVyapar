@@ -49,6 +49,7 @@ function usePageTransition() {
   Truck,
   ChevronRight,
   WifiOff,
+  UserCog,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
@@ -78,6 +79,7 @@ const MORE_ITEMS = [
   { icon: Landmark,  label: 'Bank Accounts', path: '/bank-accounts' },
   { icon: ShoppingCart, label: 'POS',        path: '/pos' },
   { icon: Truck,     label: 'Expenses',      path: '/extra-expenses' },
+  { icon: UserCog,   label: 'Employees',     path: '/employees' },
   { icon: CreditCard,label: 'Subscription',  path: '/subscription' },
 ];
 
