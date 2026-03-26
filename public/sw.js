@@ -1,7 +1,6 @@
-const CACHE = 'bv-v3';
-const API_CACHE = 'bv-api-v3';
+const CACHE = 'bv-v4';
+const API_CACHE = 'bv-api-v4';
 
-// Install — cache shell immediately
 self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/'])));
@@ -24,13 +23,16 @@ self.addEventListener('fetch', e => {
   if (url.hostname.includes('nominatim')) return;
   if (url.hostname.includes('googleapis')) return;
 
-  // ── Hashed assets — cache first forever (content-addressed) ──────────────
+  // ── Hashed assets — cache first forever ──────────────────────────────────
   if (url.pathname.startsWith('/assets/')) {
     e.respondWith(
       caches.match(request).then(cached => {
         if (cached) return cached;
         return fetch(request).then(res => {
-          if (res.ok) caches.open(CACHE).then(c => c.put(request, res.clone()));
+          if (res.ok) {
+            // Clone BEFORE consuming — fixes "body already used" error
+            caches.open(CACHE).then(c => c.put(request, res.clone()));
+          }
           return res;
         });
       })
@@ -38,7 +40,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // ── API calls — stale-while-revalidate (show cached, refresh in background) ─
+  // ── API calls — stale-while-revalidate ────────────────────────────────────
   const isApiCall = url.pathname.startsWith('/customers') ||
     url.pathname.startsWith('/suppliers') ||
     url.pathname.startsWith('/items') ||
@@ -52,23 +54,28 @@ self.addEventListener('fetch', e => {
       caches.open(API_CACHE).then(async cache => {
         const cached = await cache.match(request);
         const fetchPromise = fetch(request).then(res => {
-          if (res.ok) cache.put(request, res.clone());
+          if (res.ok) {
+            // Clone BEFORE consuming — fixes "body already used" error
+            cache.put(request, res.clone());
+          }
           return res;
-        }).catch(() => cached); // fallback to cache on network error
+        }).catch(() => cached);
 
-        // Return cached immediately, revalidate in background
         return cached || fetchPromise;
       })
     );
     return;
   }
 
-  // ── HTML navigation — network first, fallback to cached shell ────────────
+  // ── HTML navigation — network first ──────────────────────────────────────
   if (request.mode === 'navigate') {
     e.respondWith(
       fetch(request)
         .then(res => {
-          if (res.ok) caches.open(CACHE).then(c => c.put(request, res.clone()));
+          if (res.ok) {
+            // Clone BEFORE consuming
+            caches.open(CACHE).then(c => c.put(request, res.clone()));
+          }
           return res;
         })
         .catch(() => caches.match(request).then(c => c || caches.match('/')))
