@@ -38,3 +38,6 @@ Thumbs.db
 
 # misc
 *.local
+.agent/
+.gemini/
+.planning/
