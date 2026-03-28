@@ -61,6 +61,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await original(...args);
       if (res.status === 402) {
         setSubscriptionExpired(true);
+        // Clone so the body can still be read by the caller
+        return res.clone();
       }
       return res;
     };
