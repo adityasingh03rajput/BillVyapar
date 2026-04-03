@@ -6,7 +6,7 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { Check, AlertCircle, Key, Clock, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { API_URL } from '../config/api';
+import { API_URL, FRONTEND_VERSION } from '../config/api';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 
@@ -26,10 +26,18 @@ export function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [licenseKey, setLicenseKey] = useState('');
   const [activating, setActivating] = useState(false);
+  const [backendVersion, setBackendVersion] = useState<string | null>(null);
   const { accessToken, deviceId, setSubscriptionExpired } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => { loadStatus(); }, []);
+  useEffect(() => {
+    loadStatus();
+    // Fetch backend version on mount
+    fetch(`${API_URL}/version`)
+      .then(r => r.json())
+      .then(d => setBackendVersion(d?.backend || null))
+      .catch(() => setBackendVersion('unavailable'));
+  }, []);
 
   const loadStatus = async () => {
     try {
@@ -207,6 +215,35 @@ export function SubscriptionPage() {
             </ul>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Version info */}
+      <div className="mt-6 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+          Frontend <span className="font-mono font-semibold text-foreground">v{FRONTEND_VERSION}</span>
+        </span>
+        <span className="text-border">·</span>
+        <span className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full inline-block ${backendVersion && backendVersion !== 'unavailable' ? 'bg-green-500' : 'bg-red-400'}`} />
+          Backend <span className="font-mono font-semibold text-foreground">
+            {backendVersion ? `v${backendVersion}` : '…'}
+          </span>
+        </span>
+        <span className="text-border">·</span>
+        <button
+          type="button"
+          className="hover:text-foreground transition-colors"
+          onClick={() => {
+            setBackendVersion(null);
+            fetch(`${API_URL}/version`)
+              .then(r => r.json())
+              .then(d => setBackendVersion(d?.backend || null))
+              .catch(() => setBackendVersion('unavailable'));
+          }}
+        >
+          ↻ refresh
+        </button>
       </div>
     </>
   );

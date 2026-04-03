@@ -49,3 +49,6 @@ export function mkCacheKey(resource: string, profileId: string): string {
   const serverTag = API_URL.includes('localhost') ? 'local' : 'prod';
   return `cache:${resource}:${serverTag}:${profileId}`;
 }
+
+/** Frontend app version — increment on every meaningful release */
+export const FRONTEND_VERSION = '1.0.1';

@@ -133,15 +133,22 @@ app.use('/employees/login', authLimiter);
 app.use(apiLimiter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
+const BACKEND_VERSION = '1.0.1'; // increment this on every backend deploy
+
 app.get('/health', (_req, res) => {
   const dbState = mongoose.connection.readyState;
-  // 1 = connected, 2 = connecting
   const dbOk = dbState === 1 || dbState === 2;
   res.status(dbOk ? 200 : 503).json({
     status: dbOk ? 'ok' : 'degraded',
     db: ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState] ?? 'unknown',
     uptime: Math.floor(process.uptime()),
+    version: BACKEND_VERSION,
   });
+});
+
+// ── Version endpoint (public, no auth) ───────────────────────────────────────
+app.get('/version', (_req, res) => {
+  res.json({ backend: BACKEND_VERSION });
 });
 
 // ── Routes ────────────────────────────────────────────────────────────────────
