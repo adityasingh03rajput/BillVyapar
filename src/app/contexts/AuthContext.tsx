@@ -20,6 +20,7 @@ interface AuthContextType {
   loading: boolean;
   subscriptionExpired: boolean;
   isEmployee: boolean;
+  sessionKey: number; // increments on every sign-in/sign-out — use as React key to force remount
   setSubscriptionExpired: (v: boolean) => void;
   signIn: (email: string, password: string) => Promise<void>;
   signInAsEmployee: (email: string, password: string) => Promise<void>;
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
   const isEmployee = user?.userType === 'employee';
+  const [sessionKey, setSessionKey] = useState(0);
   const [deviceId] = useState(() => {
     let id = localStorage.getItem('deviceId');
     if (!id) {
@@ -148,6 +150,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // This prevents user A's profile from flashing when user B logs in
     localStorage.removeItem('currentProfile');
     await clearApiCache();
+    // Increment sessionKey to force-remount all pages (wipes all React state)
+    setSessionKey(k => k + 1);
     // Signal all pages to clear their local state (prevents stale data flash)
     window.dispatchEvent(new CustomEvent('appSignIn', { detail: { userId: userData.id } }));
 
@@ -227,7 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, deviceId, loading, subscriptionExpired, setSubscriptionExpired, signIn, signInAsEmployee, signUp, signOut, isEmployee }}>
+    <AuthContext.Provider value={{ user, accessToken, deviceId, loading, subscriptionExpired, setSubscriptionExpired, signIn, signInAsEmployee, signUp, signOut, isEmployee, sessionKey }}>
       {children}
     </AuthContext.Provider>
   );

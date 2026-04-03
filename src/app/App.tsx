@@ -63,7 +63,7 @@ function wrap(Component: React.ComponentType) {
 
 /** Persistent layout — never unmounts during navigation, preloads top routes on idle */
 function LayoutRoute() {
-  const { isEmployee } = useAuth();
+  const { isEmployee, sessionKey } = useAuth();
 
   useEffect(() => {
     if (!isEmployee) {
@@ -76,7 +76,9 @@ function LayoutRoute() {
   }
 
   return (
-    <AppLayout>
+    // key=sessionKey forces full remount of AppLayout + all child pages on sign-in/sign-out
+    // This guarantees zero stale state from previous user
+    <AppLayout key={sessionKey}>
       <Outlet />
     </AppLayout>
   );
