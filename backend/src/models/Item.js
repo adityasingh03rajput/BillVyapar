@@ -5,7 +5,7 @@ const itemSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     profileId: { type: mongoose.Schema.Types.ObjectId, ref: 'BusinessProfile', required: true, index: true },
 
-    name: { type: String, required: true },
+    name: { type: String, required: true, trim: true },
     hsnSac: { type: String, default: null },
     unit: { type: String, required: true },
     rate: { type: Number, required: true },
@@ -22,6 +22,9 @@ const itemSchema = new mongoose.Schema(
 
 // Compound index — all queries filter on (userId, profileId)
 itemSchema.index({ userId: 1, profileId: 1, createdAt: 1 });
-itemSchema.index({ userId: 1, profileId: 1, name: 1 });
+itemSchema.index(
+  { profileId: 1, name: 1 },
+  { unique: true, collation: { locale: 'en', strength: 2 } }
+);
 
 export const Item = mongoose.model('Item', itemSchema);

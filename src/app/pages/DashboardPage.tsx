@@ -17,6 +17,7 @@ import { TraceLoader } from '../components/TraceLoader';
 import { GenericPageSkeleton } from '../components/PageSkeleton';
 import { prefetchRoutesOnIdle } from '../hooks/usePrefetch';
 import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 export function DashboardPage() {
   const [analytics, setAnalytics] = useState<any>(null);
@@ -26,33 +27,28 @@ export function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
   const { accessToken, deviceId } = useAuth();
   const navigate = useNavigate();
+  const { profileId } = useCurrentProfile();
 
   const apiUrl = API_URL;
 
-  // Read profileId fresh each time — avoids stale closure issues
-  const getProfileId = () => {
-    try {
-      const raw = localStorage.getItem('currentProfile');
-      if (!raw) return '';
-      const p = JSON.parse(raw);
-      return (typeof p === 'string' ? JSON.parse(p) : p)?.id ?? '';
-    } catch { return ''; }
-  };
+  // Reset all state when profile switches to prevent data bleed
+  useEffect(() => {
+    setAnalytics(null);
+    setRecentDocs([]);
+    setSubscription(null);
+    setLoading(true);
+  }, [profileId]);
 
-  const [profileId, setProfileId] = useState<string>(getProfileId);
-
-  // Single effect: load on mount + listen for profile changes
+  // Single effect: load on mount + listen for profile changes + dashboard refresh
   useEffect(() => {
     if (profileId) loadDashboardData(profileId, dateRange);
 
-    const onProfileRefreshed = (e: Event) => {
-      const newId = (e as CustomEvent)?.detail?.id;
-      if (newId && newId !== profileId) {
-        setProfileId(newId);
-      }
+    const onDashboardRefresh = () => {
+      if (profileId) loadDashboardData(profileId, dateRange);
     };
-    window.addEventListener('profileRefreshed', onProfileRefreshed);
-    return () => window.removeEventListener('profileRefreshed', onProfileRefreshed);
+
+    window.addEventListener('dashboardRefresh', onDashboardRefresh);
+    return () => window.removeEventListener('dashboardRefresh', onDashboardRefresh);
   }, [profileId, accessToken]);
 
   const loadDashboardData = async (pid: string, range: DateRange) => {

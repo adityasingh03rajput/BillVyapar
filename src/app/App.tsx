@@ -117,16 +117,23 @@ function buildRouter() {
   ]);
 }
 
-// Singleton router — created once inside the provider tree via AppInner
+// Singleton router — stable across re-renders, created once per app lifecycle
 let _router: ReturnType<typeof buildRouter> | null = null;
 
 function AppInner() {
   const isNative = useIsNative();
-  if (!_router) _router = buildRouter();
+  // Create router once and keep it stable — never recreate on re-render
+  const routerRef = React.useRef<ReturnType<typeof buildRouter> | null>(null);
+  if (!routerRef.current) {
+    // Reuse module-level singleton if available (survives HMR in prod)
+    // but always create fresh if null (first mount or after full reload)
+    if (!_router) _router = buildRouter();
+    routerRef.current = _router;
+  }
   return (
     <>
       {!isNative && <OfflineBanner />}
-      <RouterProvider router={_router} />
+      <RouterProvider router={routerRef.current} />
       <Toaster />
     </>
   );

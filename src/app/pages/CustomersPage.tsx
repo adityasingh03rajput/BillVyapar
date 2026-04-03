@@ -21,6 +21,7 @@ import { PhoneInput, EmailInput, GstinInput, PanInput, PostalCodeInput, AddressI
 import { toast } from 'sonner';
 import { CustomersPageSkeleton } from '../components/PageSkeleton';
 import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 interface Customer {
   id: string;
@@ -72,19 +73,28 @@ export function CustomersPage() {
   const { accessToken, deviceId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { profileId } = useCurrentProfile();
 
   const apiUrl = API_URL;
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
 
-  // Re-fetch when AppLayout resolves a stale/new profile
+  // Reset all state when profile switches to prevent data bleed
   useEffect(() => {
-    const handler = (e: Event) => {
-      const newId = (e as CustomEvent)?.detail?.id;
-      if (newId && newId !== profileId) setProfileId(newId);
-    };
-    window.addEventListener('profileRefreshed', handler);
-    return () => window.removeEventListener('profileRefreshed', handler);
+    setCustomers([]);
+    setFilteredCustomers([]);
+    setSearchTerm('');
+    setShowCreateDialog(false);
+    setFormData({});
+    setFormErrors({});
+    setShowEditDialog(false);
+    setEditingCustomerId(null);
+    setEditFormData({});
+    setEditFormErrors({});
+    setDeleteDialogOpen(false);
+    setDeleteCustomer(null);
+    setOutstandingOpen(false);
+    setOutstandingTotal(0);
+    setOutstandingByCustomer([]);
+    setLoading(true);
   }, [profileId]);
 
   const handleGstinLookupAutofill = async (target: 'create' | 'edit') => {
@@ -497,6 +507,7 @@ export function CustomersPage() {
       setFilteredCustomers((prev) => prev.filter((c) => c.id !== deleteCustomer.id));
       clearCustomersCache();
       toast.success('Customer deleted');
+      window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       setDeleteDialogOpen(false);
       setDeleteCustomer(null);
     } catch (e: any) {
@@ -575,6 +586,7 @@ export function CustomersPage() {
         setShowEditDialog(false);
         setEditingCustomerId(null);
         setEditFormData({});
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       }
     } catch {
       toast.error('Failed to update customer');
@@ -648,6 +660,7 @@ export function CustomersPage() {
         setCustomers([...customers, data]);
         setShowCreateDialog(false);
         setFormData({});
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
 
         const st: any = (location as any)?.state;
         if (st?.returnTo) {
@@ -691,6 +704,7 @@ export function CustomersPage() {
         setCustomers([...customers, data]);
         setShowCreateDialog(false);
         setFormData({});
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
 
         const st: any = (location as any)?.state;
         if (st?.returnTo) {

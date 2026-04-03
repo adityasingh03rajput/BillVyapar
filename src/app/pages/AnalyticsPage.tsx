@@ -15,30 +15,27 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
-import { toast } from 'sonner';
-import { AnalyticsPageSkeleton } from '../components/PageSkeleton';
+import { TraceLoader } from '../components/TraceLoader';
+import { GenericPageSkeleton } from '../components/PageSkeleton';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { getCurrentFiscalYearRange } from '../utils/fiscal';
 import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
+import { toast } from 'sonner';
 
 export function AnalyticsPage() {
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
-
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
   const [applyingRange, setApplyingRange] = useState(false);
   const { accessToken, deviceId } = useAuth();
+  const { profileId } = useCurrentProfile();
 
   const apiUrl = API_URL;
 
+  // Reset all state when profile switches to prevent data bleed
   useEffect(() => {
-    const handler = (e: Event) => {
-      const newId = (e as CustomEvent)?.detail?.id;
-      if (newId && newId !== profileId) setProfileId(newId);
-    };
-    window.addEventListener('profileRefreshed', handler);
-    return () => window.removeEventListener('profileRefreshed', handler);
+    setAnalytics(null);
+    setLoading(true);
   }, [profileId]);
 
   useEffect(() => {

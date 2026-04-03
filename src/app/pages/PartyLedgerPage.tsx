@@ -112,6 +112,7 @@ export function PartyLedgerPage() {
   const [quickRanges, setQuickRanges] = useState<QuickRangeDto[]>([]);
   const [loadingRanges, setLoadingRanges] = useState(false);
   const [quickRangeKey, setQuickRangeKey] = useState<string>('');
+  const [visibleRows, setVisibleRows] = useState(50);
 
   const partyLabel = partyType === 'customer' ? 'Customer' : 'Supplier';
 
@@ -195,14 +196,15 @@ export function PartyLedgerPage() {
         allRows.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
 
         const combined: LedgerStatementDto = {
-          party: { id: '__all__', name: `All ${partyLabel}s`, address: null, billingAddress: null, shippingAddress: null, gstin: null, phone: null, email: null, logoUrl: null, logoDataUrl: null },
-          range: { from: from || null, to: to || null },
+          party: { id: '__all__', name: `All ${partyLabel}s` },
+          range: { from: from || '', to: to || '' },
           openingBalance: { amount: 0, type: 'dr' },
           periodTotals: { debit: totalDebit, credit: totalCredit },
           closingBalance: { amount: Math.abs(totalDebit - totalCredit), type: totalDebit >= totalCredit ? 'dr' : 'cr' },
           rows: allRows,
         };
         setStatement(combined);
+        setVisibleRows(50);
         return;
       }
 
@@ -211,6 +213,7 @@ export function PartyLedgerPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to load statement');
       setStatement(data as LedgerStatementDto);
+      setVisibleRows(50);
     } catch (e: any) {
       toast.error(e?.message || 'Failed to load statement');
       setStatement(null);
@@ -481,7 +484,7 @@ export function PartyLedgerPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {statement.rows.map((r) => (
+                    {statement.rows.slice(0, visibleRows).map((r) => (
                       <tr key={r.id} className="border-b last:border-b-0">
                         <td className="py-2 pr-3 whitespace-nowrap">{String(r.date || '').slice(0, 10)}</td>
                         <td className="py-2 pr-3">
@@ -504,6 +507,45 @@ export function PartyLedgerPage() {
                     </tr>
                   </tbody>
                 </table>
+                {statement.rows.length > visibleRows && (
+                  <div className="mt-4 space-y-2">
+                    {/* Progress bar showing how much is loaded */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-500"
+                          style={{ width: `${Math.round((visibleRows / statement.rows.length) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {visibleRows} / {statement.rows.length}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleRows(v => Math.min(v + 50, statement.rows.length))}
+                      className="w-full py-2.5 rounded-lg border border-dashed border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5 hover:border-primary transition-all duration-200 flex items-center justify-center gap-2"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                      Load {Math.min(50, statement.rows.length - visibleRows)} more entries
+                    </button>
+                  </div>
+                )}
+                {statement.rows.length > 50 && visibleRows >= statement.rows.length && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="flex-1 h-1.5 rounded-full bg-primary/20">
+                      <div className="h-full w-full rounded-full bg-primary" />
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">All {statement.rows.length} loaded</span>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleRows(50)}
+                      className="text-xs text-muted-foreground hover:text-foreground underline shrink-0"
+                    >
+                      Collapse
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

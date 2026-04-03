@@ -160,6 +160,10 @@ documentSchema.index({ userId: 1, profileId: 1, createdAt: -1 });
 documentSchema.index({ userId: 1, profileId: 1, type: 1, createdAt: -1 });
 documentSchema.index({ userId: 1, profileId: 1, paymentStatus: 1 });
 documentSchema.index({ userId: 1, profileId: 1, status: 1 });
+documentSchema.index(
+  { profileId: 1, type: 1, fiscalYear: 1, documentNumber: 1 },
+  { unique: true, collation: { locale: 'en', strength: 2 } }
+);
 // For auto-reminder job
 documentSchema.index({ type: 1, paymentStatus: 1, updatedAt: -1 });
 // AUDIT FIX #15: Prevent duplicate custom invoice numbers within the same profile

@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
+import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import {
   Command,
@@ -457,16 +459,16 @@ export function CreateDocumentPage() {
 
   const uploadLogoToCloudinary = async (dataUrl: string) => {
     if (!accessToken) throw new Error('Not authenticated');
-    if (!profileId) throw new Error('Select a business profile first');
+    if (!profile?.id) throw new Error('Select a business profile first');
     const res = await fetch(`${apiUrl}/uploads/logo`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
         'X-Device-ID': deviceId,
-        'X-Profile-ID': profileId,
+        'X-Profile-ID': profile?.id,
       },
-      body: JSON.stringify({ dataUrl, folder: `hukum/logos/${profileId}/parties` }),
+      body: JSON.stringify({ dataUrl, folder: `hukum/logos/${profile?.id}/parties` }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -478,7 +480,7 @@ export function CreateDocumentPage() {
   };
 
   const handleCreateCustomerGstinLookup = async () => {
-    if (!accessToken || !deviceId || !profileId) return;
+    if (!accessToken || !deviceId || !profile?.id) return;
     const gstin = String(createCustomerForm.gstin || '').trim().toUpperCase().replace(/\s+/g, '');
     if (!gstin) return;
     if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/.test(gstin)) return;
@@ -492,7 +494,7 @@ export function CreateDocumentPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
-          'X-Profile-ID': profileId,
+          'X-Profile-ID': profile?.id,
         },
         body: JSON.stringify({ gstin }),
       });
@@ -543,7 +545,7 @@ export function CreateDocumentPage() {
   };
 
   const handleCreateItemInline = async () => {
-    if (!accessToken || !deviceId || !profileId) {
+    if (!accessToken || !deviceId || !profile?.id) {
       toast.error('Missing session/profile');
       return;
     }
@@ -573,7 +575,7 @@ export function CreateDocumentPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
-          'X-Profile-ID': profileId,
+          'X-Profile-ID': profile?.id,
         },
         body: JSON.stringify({
           name,
@@ -654,6 +656,7 @@ export function CreateDocumentPage() {
         description: '',
       });
       toast.success('Item created');
+      window.dispatchEvent(new CustomEvent('dashboardRefresh'));
     } catch (e: any) {
       toast.error(e?.message || 'Failed to create item');
     } finally {
@@ -662,52 +665,17 @@ export function CreateDocumentPage() {
   };
 
   const apiUrl = API_URL;
-  const readCurrentProfile = () => {
-    const raw = localStorage.getItem('currentProfile');
-    if (!raw) return {} as any;
-    try {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed === 'string') {
-        try {
-          return JSON.parse(parsed);
-        } catch {
-          return {} as any;
-        }
-      }
-      return parsed || ({} as any);
-    } catch {
-      return {} as any;
-    }
-  };
+  const { profile } = useCurrentProfile();
 
-  const [currentProfile, setCurrentProfile] = useState<any>(() => {
-    try {
-      const raw = localStorage.getItem('currentProfile');
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed;
-    } catch { return null; }
-  });
-
-  // Keep in sync when AppLayout refreshes the profile from the server on mount
+  // Reset all state when profile switches to prevent data bleed
   useEffect(() => {
-    const onProfileRefreshed = (e: CustomEvent) => {
-      const fresh = e.detail;
-      if (fresh?.id) setCurrentProfile(fresh);
-    };
-    window.addEventListener('profileRefreshed', onProfileRefreshed as EventListener);
-    return () => window.removeEventListener('profileRefreshed', onProfileRefreshed as EventListener);
-  }, []);
+    setLoading(false);
+    setSaving(false);
+    // Add other state resets here if needed
+  }, [profile?.id]);
 
-  const [profileId, setProfileId] = useState<string>(() => {
-    return String(currentProfile?.id || '').trim();
-  });
-
-  useEffect(() => {
-    if (currentProfile?.id) {
-      setProfileId(String(currentProfile.id).trim());
-    }
-  }, [currentProfile]);
+  // Keep in sync when AppLayout refreshes profile from the server on mount
+  // Handled by useCurrentProfile hook now
 
   useEffect(() => {
     if (isEdit) {
@@ -741,8 +709,8 @@ export function CreateDocumentPage() {
   useEffect(() => {
     if (isEdit) return;
 
-    const accounts = Array.isArray(currentProfile?.bankAccounts) ? currentProfile.bankAccounts : [];
-    const defaultId = String(currentProfile?.defaultBankAccountId || '').trim();
+    const accounts = Array.isArray(profile?.bankAccounts) ? profile.bankAccounts : [];
+    const defaultId = String(profile?.defaultBankAccountId || '').trim();
     const fallbackDefault = accounts.find((a: any) => a?.isDefault && a?._id) || null;
     const resolvedDefaultId = defaultId || String(fallbackDefault?._id || '').trim();
     if (!bankAccountId && resolvedDefaultId) setBankAccountId(resolvedDefaultId);
@@ -751,11 +719,11 @@ export function CreateDocumentPage() {
       ? accounts.find((a: any) => String(a?._id || '') === String(resolvedDefaultId))
       : null;
 
-    const nextBankName = String(currentProfile?.bankName || '').trim();
-    const nextBranch = String(currentProfile?.bankBranch || '').trim();
-    const nextAcc = String(currentProfile?.accountNumber || '').trim();
-    const nextIfsc = String(currentProfile?.ifscCode || '').trim();
-    const nextUpi = String(currentProfile?.upiId || '').trim();
+    const nextBankName = String(profile?.bankName || '').trim();
+    const nextBranch = String(profile?.bankBranch || '').trim();
+    const nextAcc = String(profile?.accountNumber || '').trim();
+    const nextIfsc = String(profile?.ifscCode || '').trim();
+    const nextUpi = String(profile?.upiId || '').trim();
 
     const nextSelBankName = String(selected?.bankName || '').trim();
     const nextSelBranch = String(selected?.bankBranch || '').trim();
@@ -771,7 +739,7 @@ export function CreateDocumentPage() {
     if (!upiId && (nextSelUpi || nextUpi)) setUpiId(nextSelUpi || nextUpi);
     if (!upiQrText && nextSelUpiQr) setUpiQrText(nextSelUpiQr);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, profileId]);
+  }, [isEdit, profile?.id]);
 
   useEffect(() => {
     if (type === 'purchase') {
@@ -811,9 +779,9 @@ export function CreateDocumentPage() {
   }, [type]);
 
   useEffect(() => {
-    if (!accessToken || !deviceId || !profileId) return;
+    if (!accessToken || !deviceId || !profile?.id) return;
     void loadPresets();
-  }, [accessToken, deviceId, profileId, type, partyKind]);
+  }, [accessToken, deviceId, profile?.id, type, partyKind]);
 
   useEffect(() => {
     if (type !== 'order') return;
@@ -866,20 +834,20 @@ export function CreateDocumentPage() {
   }, [type, departureToPostalCode, departureToAddress, departureToCity, departureToState]);
 
   useEffect(() => {
-    if (!accessToken || !deviceId || !profileId) return;
+    if (!accessToken || !deviceId || !profile?.id) return;
     if (type !== 'invoice_cancellation' && type !== 'order') return;
     void loadReferenceDocs();
-  }, [accessToken, deviceId, profileId, type]);
+  }, [accessToken, deviceId, profile?.id, type]);
 
   const loadPresets = async () => {
     try {
       const headers = {
         'Authorization': `Bearer ${accessToken}`,
         'X-Device-ID': deviceId,
-        'X-Profile-ID': profileId,
+        'X-Profile-ID': profile?.id,
       };
 
-      if (!profileId) return; // Wait for profileId to be loaded
+      if (!profile?.id) return; // Wait for profile?.id to be loaded
 
       const customersUrl = partyKind === 'supplier' ? `${apiUrl}/suppliers` : `${apiUrl}/customers`;
       const [customersRes, itemsRes] = await Promise.all([
@@ -937,7 +905,7 @@ export function CreateDocumentPage() {
       const headers = {
         'Authorization': `Bearer ${accessToken}`,
         'X-Device-ID': deviceId,
-        'X-Profile-ID': profileId,
+        'X-Profile-ID': profile?.id,
       };
       const res = await fetch(`${apiUrl}/documents`, { headers });
       const data = await res.json().catch(() => []);
@@ -1039,7 +1007,7 @@ export function CreateDocumentPage() {
         const headers = {
           Authorization: `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
-          'X-Profile-ID': profileId,
+          'X-Profile-ID': profile?.id,
         };
         const res = await fetch(`${apiUrl}/documents`, { headers });
         const data = await res.json().catch(() => []);
@@ -1063,7 +1031,7 @@ export function CreateDocumentPage() {
     setLoading(true);
     try {
       const response = await fetch(`${apiUrl}/documents/${id}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profile?.id },
       });
       const doc = await response.json();
       if (!response.ok || doc?.error) {
@@ -1292,7 +1260,7 @@ export function CreateDocumentPage() {
   };
 
   const handleCreateCustomerInline = async () => {
-    if (!accessToken || !deviceId || !profileId) {
+    if (!accessToken || !deviceId || !profile?.id) {
       toast.error('Missing session/profile');
       return;
     }
@@ -1331,7 +1299,7 @@ export function CreateDocumentPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
-          'X-Profile-ID': profileId,
+          'X-Profile-ID': profile?.id,
         },
         body: JSON.stringify({
           name,
@@ -1431,6 +1399,7 @@ export function CreateDocumentPage() {
         logoUrl: '',
       });
       toast.success(`${partyKind === 'supplier' ? 'Supplier' : 'Customer'} created`);
+      window.dispatchEvent(new CustomEvent('dashboardRefresh'));
     } catch (e: any) {
       toast.error(e?.message || `Failed to create ${partyKind === 'supplier' ? 'supplier' : 'customer'}`);
     } finally {
@@ -1843,7 +1812,7 @@ export function CreateDocumentPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
-          'X-Profile-ID': profileId,
+          'X-Profile-ID': profile?.id,
         },
         body: JSON.stringify(documentData),
       });
@@ -1860,6 +1829,7 @@ export function CreateDocumentPage() {
         }
       } else {
         toast.success(isEdit ? 'Document updated!' : 'Document created!');
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
         navigate('/documents');
       }
     } catch (error) {
@@ -2677,17 +2647,17 @@ export function CreateDocumentPage() {
                                 }
                                 if (next === '__null__') {
                                   setBankAccountId('__null__');
-                                  setBankName(String((currentProfile as any)?.bankName || ''));
-                                  setBankBranch(String((currentProfile as any)?.bankBranch || ''));
-                                  setBankAccountNumber(String((currentProfile as any)?.accountNumber || ''));
-                                  setBankIfsc(String((currentProfile as any)?.ifscCode || ''));
-                                  setUpiId(String((currentProfile as any)?.upiId || ''));
+                                  setBankName(String((profile as any)?.bankName || ''));
+                                  setBankBranch(String((profile as any)?.bankBranch || ''));
+                                  setBankAccountNumber(String((profile as any)?.accountNumber || ''));
+                                  setBankIfsc(String((profile as any)?.ifscCode || ''));
+                                  setUpiId(String((profile as any)?.upiId || ''));
                                   setUpiQrText('');
                                   return;
                                 }
                                 setBankAccountId(next);
 
-                                const accounts = Array.isArray(currentProfile?.bankAccounts) ? currentProfile.bankAccounts : [];
+                                const accounts = Array.isArray(profile?.bankAccounts) ? profile.bankAccounts : [];
                                 const selected = accounts.find((a: any) => String(a?._id || '') === String(next));
                                 if (!selected) return;
 
@@ -2705,15 +2675,15 @@ export function CreateDocumentPage() {
                               <SelectContent>
                                 <SelectItem value="__custom__">Custom</SelectItem>
                                 {(() => {
-                                  const legacyBankName = String((currentProfile as any)?.bankName || '').trim();
-                                  const legacyAcc = String((currentProfile as any)?.accountNumber || '').trim();
-                                  const legacyIfsc = String((currentProfile as any)?.ifscCode || '').trim();
-                                  const legacyUpi = String((currentProfile as any)?.upiId || '').trim();
+                                  const legacyBankName = String((profile as any)?.bankName || '').trim();
+                                  const legacyAcc = String((profile as any)?.accountNumber || '').trim();
+                                  const legacyIfsc = String((profile as any)?.ifscCode || '').trim();
+                                  const legacyUpi = String((profile as any)?.upiId || '').trim();
                                   const hasLegacy = !!(legacyBankName || legacyAcc || legacyIfsc || legacyUpi);
                                   if (!hasLegacy) return null;
                                   return <SelectItem value="__null__">{legacyBankName || 'Primary Bank'}</SelectItem>;
                                 })()}
-                                {(Array.isArray((currentProfile as any)?.bankAccounts) ? (currentProfile as any).bankAccounts : []).map((a: any) => (
+                                {(Array.isArray((profile as any)?.bankAccounts) ? (profile as any).bankAccounts : []).map((a: any) => (
                                   <SelectItem key={String(a?._id || a?.label || Math.random())} value={String(a?._id || '')}>
                                     {String(a?.label || a?.bankName || 'Bank Account')}
                                   </SelectItem>

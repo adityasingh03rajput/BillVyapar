@@ -8,8 +8,10 @@ import { Plus, Search, Package, Tag, Edit } from 'lucide-react';
 import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL, mkCacheKey } from '../config/api';
-import { toast } from 'sonner';
+import { TraceLoader } from '../components/TraceLoader';
 import { ItemsPageSkeleton } from '../components/PageSkeleton';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { toast } from 'sonner';
 
 interface Item {
   id: string;
@@ -52,16 +54,28 @@ export function ItemsPage() {
   const { accessToken, deviceId } = useAuth();
 
   const apiUrl = API_URL;
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
+  const { profileId } = useCurrentProfile();
 
+  // Reset all state when profile switches to prevent data bleed
   useEffect(() => {
-    const handler = (e: Event) => {
-      const newId = (e as CustomEvent)?.detail?.id;
-      if (newId && newId !== profileId) setProfileId(newId);
-    };
-    window.addEventListener('profileRefreshed', handler);
-    return () => window.removeEventListener('profileRefreshed', handler);
+    setItems([]);
+    setFilteredItems([]);
+    setSearchTerm('');
+    setShowCreateDialog(false);
+    setShowEditDialog(false);
+    setEditingItemId(null);
+    setEditFormData({});
+    setFormData({
+      unit: 'pcs',
+      rate: 0,
+      sellingPrice: 0,
+      purchaseCost: 0,
+      discount: 0,
+      cgst: 9,
+      sgst: 9,
+      igst: 0,
+    });
+    setLoading(true);
   }, [profileId]);
 
   useEffect(() => {
@@ -140,6 +154,7 @@ export function ItemsPage() {
         setShowEditDialog(false);
         setEditingItemId(null);
         setEditFormData({});
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       }
     } catch {
       toast.error('Failed to update item');
@@ -184,6 +199,7 @@ export function ItemsPage() {
           sgst: 9,
           igst: 0,
         });
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       }
     } catch (error) {
       toast.error('Failed to create item');

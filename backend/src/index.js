@@ -52,6 +52,11 @@ if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required');
 
 const app = express();
 
+// ── Minimal liveness probe (always works) ───────────────────────────────────────
+app.get('/ping', (_req, res) => {
+  res.json({ status: 'ok', ts: new Date().toISOString() });
+});
+
 // ── Compression ───────────────────────────────────────────────────────────────
 // Gzip all responses > 1KB — cuts payload size by ~70% on JSON lists
 app.use(compression({ threshold: 1024 }));
@@ -196,6 +201,22 @@ app.use((err, _req, res, _next) => {
   // Don't log 4xx — those are client errors, not server problems
   if (!err?.status || err.status >= 500) {
     console.error('[ERROR]', err?.message || err);
+  }
+  // Mongo unique index violation
+  if (err?.code === 11000) {
+    const key = err?.keyPattern ? Object.keys(err.keyPattern)[0] : null;
+    const value = err?.keyValue?.[key];
+    const fieldLabel = key === 'name'
+      ? 'Name'
+      : key === 'documentNumber'
+        ? 'Invoice number'
+        : key === 'invoiceNo'
+          ? 'Invoice number'
+          : 'Value';
+    const msg = value != null
+      ? `${fieldLabel} already exists: ${String(value)}`
+      : `${fieldLabel} already exists`;
+    return res.status(409).json({ error: msg });
   }
   const status = Number(err?.status || err?.statusCode || 500);
   const message = err?.message ? String(err.message) : 'Internal server error';

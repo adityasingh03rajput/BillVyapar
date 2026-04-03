@@ -5,7 +5,7 @@ const customerSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     profileId: { type: mongoose.Schema.Types.ObjectId, ref: 'BusinessProfile', required: true, index: true },
 
-    name: { type: String, required: true },
+    name: { type: String, required: true, trim: true },
     ownerName: { type: String, default: null },
     email: { type: String, default: null },
     phone: { type: String, default: null },
@@ -33,6 +33,9 @@ const customerSchema = new mongoose.Schema(
 
 // Compound index — all queries filter on (userId, profileId)
 customerSchema.index({ userId: 1, profileId: 1, createdAt: 1 });
-customerSchema.index({ userId: 1, profileId: 1, name: 1 });
+customerSchema.index(
+  { profileId: 1, name: 1 },
+  { unique: true, collation: { locale: 'en', strength: 2 } }
+);
 
 export const Customer = mongoose.model('Customer', customerSchema);

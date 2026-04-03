@@ -40,9 +40,11 @@ import { useIsNative } from '../hooks/useIsNative';
 import { API_URL, mkCacheKey } from '../config/api';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
-import { DocumentsPageSkeleton } from '../components/PageSkeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { GenericPageSkeleton } from '../components/PageSkeleton';
+import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { fetchDocumentById, PDF_TEMPLATES, PdfRenderer, exportElementToPdf, exportElementToPdfBlobUrl, type PdfTemplateId, type DocumentDto } from '../pdf';
 import { useRef } from 'react';
 import QRCode from 'qrcode';
@@ -72,17 +74,23 @@ export function DocumentsPage() {
   const isNative = useIsNative();
   const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search || '');
-    const t = String(params.get('type') || '').trim();
-    if (t && t !== filterType) {
-      setFilterType(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search]);
+  const { profile, profileId } = useCurrentProfile();
 
   const apiUrl = API_URL;
+
+  // Reset all state when profile switches to prevent data bleed
+  useEffect(() => {
+    setDocuments([]);
+    setFilteredDocs([]);
+    setSearchTerm('');
+    setPartyFilter('');
+    setFilterType('all');
+    setFilterStatus('all');
+    setDateRange({ from: '', to: '' });
+    setDeleteDialogOpen(false);
+    setDeleteDoc(null);
+    setLoading(true);
+  }, [profileId]);
 
   const pdfPreviewCacheRef = useRef(
     new Map<string, { url: string; createdAt: number }>()
@@ -201,6 +209,7 @@ export function DocumentsPage() {
       setDocuments((prev) => prev.filter((d) => d.id !== deleteDoc.id));
       setFilteredDocs((prev) => prev.filter((d) => d.id !== deleteDoc.id));
       toast.success('Document deleted');
+      window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       setDeleteDialogOpen(false);
       setDeleteDoc(null);
     } catch (e: any) {
@@ -273,18 +282,12 @@ export function DocumentsPage() {
     }
   };
 
-  const currentProfile = readCurrentProfile();
-  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
-
   // Re-fetch when AppLayout resolves a stale/new profile
   useEffect(() => {
-    const handler = (e: Event) => {
-      const newId = (e as CustomEvent)?.detail?.id;
-      if (newId && newId !== profileId) setProfileId(newId);
-    };
-    window.addEventListener('profileRefreshed', handler);
-    return () => window.removeEventListener('profileRefreshed', handler);
-  }, [profileId]);
+    if (!accessToken || !deviceId || !profileId) return;
+    loadDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, deviceId, profileId]);
 
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfTemplateId, setPdfTemplateId] = useState<PdfTemplateId>('classic');
@@ -534,6 +537,7 @@ export function DocumentsPage() {
       } else {
         toast.success('Document duplicated successfully');
         loadDocuments();
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       }
     } catch (error) {
       toast.error('Failed to duplicate document');
@@ -706,11 +710,11 @@ export function DocumentsPage() {
         // ignore
       }
 
-      const upiId = String(doc?.upiId || currentProfile?.upiId || '').trim();
+      const upiId = String(doc?.upiId || profile?.upiId || '').trim();
       if (upiId) {
         const params = new URLSearchParams();
         params.set('pa', upiId);
-        const pn = String(currentProfile?.businessName || '').trim();
+        const pn = String(profile?.businessName || '').trim();
         if (pn) params.set('pn', pn);
         const amount = Number(doc?.grandTotal || 0);
         if (Number.isFinite(amount) && amount > 0) params.set('am', amount.toFixed(2));
@@ -1000,14 +1004,7 @@ export function DocumentsPage() {
               {pdfLoading && <div className="flex justify-center py-8"><TraceLoader label="Generating PDF..." /></div>}
               {pdfDoc && (
                 <div ref={pdfRef} className="border rounded-lg overflow-hidden">
-                  <PdfRenderer doc={pdfDoc} templateId={pdfTemplateId} profile={{
-                    id: currentProfile?.id,
-                    businessName: currentProfile?.businessName, ownerName: currentProfile?.ownerName,
-                    gstin: currentProfile?.gstin, pan: currentProfile?.pan, email: currentProfile?.email,
-                    phone: currentProfile?.phone, billingAddress: currentProfile?.billingAddress,
-                    shippingAddress: currentProfile?.shippingAddress, bankName: currentProfile?.bankName,
-                    accountNumber: currentProfile?.accountNumber, ifscCode: currentProfile?.ifscCode, upiId: currentProfile?.upiId,
-                  }} />
+                  <PdfRenderer doc={pdfDoc} templateId={pdfTemplateId} profile={profile} />
                 </div>
               )}
               <div className="flex gap-2 justify-end">
@@ -1444,21 +1441,7 @@ export function DocumentsPage() {
                     ref={pdfRef}
                     templateId={pdfTemplateId}
                     doc={pdfDoc}
-                    profile={{
-                      id: currentProfile?.id,
-                      businessName: currentProfile?.businessName,
-                      ownerName: currentProfile?.ownerName,
-                      gstin: currentProfile?.gstin,
-                      pan: currentProfile?.pan,
-                      email: currentProfile?.email,
-                      phone: currentProfile?.phone,
-                      billingAddress: currentProfile?.billingAddress,
-                      shippingAddress: currentProfile?.shippingAddress,
-                      bankName: currentProfile?.bankName,
-                      accountNumber: currentProfile?.accountNumber,
-                      ifscCode: currentProfile?.ifscCode,
-                      upiId: currentProfile?.upiId,
-                    }}
+                    profile={profile}
                   />
                 )}
               </div>

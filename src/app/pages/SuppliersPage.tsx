@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 import { CustomersPageSkeleton } from '../components/PageSkeleton';
 import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 interface Supplier {
   id: string;
@@ -66,18 +67,25 @@ export function SuppliersPage() {
   const { accessToken, deviceId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { profileId } = useCurrentProfile();
 
   const apiUrl = API_URL;
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
 
+  // Reset all state when profile switches to prevent data bleed
   useEffect(() => {
-    const handler = (e: Event) => {
-      const newId = (e as CustomEvent)?.detail?.id;
-      if (newId && newId !== profileId) setProfileId(newId);
-    };
-    window.addEventListener('profileRefreshed', handler);
-    return () => window.removeEventListener('profileRefreshed', handler);
+    setSuppliers([]);
+    setFilteredSuppliers([]);
+    setSearchTerm('');
+    setShowCreateDialog(false);
+    setFormData({});
+    setFormErrors({});
+    setShowEditDialog(false);
+    setEditingSupplierId(null);
+    setEditFormData({});
+    setEditFormErrors({});
+    setDeleteDialogOpen(false);
+    setDeleteSupplier(null);
+    setLoading(true);
   }, [profileId]);
 
   const handleGstinLookupAutofill = async (target: 'create' | 'edit') => {
@@ -260,6 +268,7 @@ export function SuppliersPage() {
       setFilteredSuppliers((prev) => prev.filter((s) => s.id !== deleteSupplier.id));
       clearSuppliersCache();
       toast.success('Supplier deleted');
+      window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       setDeleteDialogOpen(false);
       setDeleteSupplier(null);
     } catch (e: any) {
@@ -328,6 +337,7 @@ export function SuppliersPage() {
         setShowEditDialog(false);
         setEditingSupplierId(null);
         setEditFormData({});
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
       }
     } catch {
       toast.error('Failed to update supplier');
@@ -390,6 +400,7 @@ export function SuppliersPage() {
         setSuppliers([...suppliers, data]);
         setShowCreateDialog(false);
         setFormData({});
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
 
         const st: any = (location as any)?.state;
         if (st?.returnTo) {
@@ -433,6 +444,7 @@ export function SuppliersPage() {
         setSuppliers([...suppliers, data]);
         setShowCreateDialog(false);
         setFormData({});
+        window.dispatchEvent(new CustomEvent('dashboardRefresh'));
 
         const st: any = (location as any)?.state;
         if (st?.returnTo) {
