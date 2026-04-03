@@ -95,14 +95,17 @@ self.addEventListener('fetch', e => {
       caches.open(API_CACHE).then(async cache => {
         const cached = await cache.match(request);
 
-        // Try network — update cache on success
-        const networkPromise = fetch(request).then(res => {
-          if (res.ok) {
-            const clone = res.clone();
-            cache.put(request, clone);
-          }
-          return res;
-        }).catch(() => null); // null = offline
+        const networkPromise = fetch(request)
+          .then((res) => {
+            if (res.ok) {
+              const clone = res.clone();
+              try {
+                cache.put(request, clone).catch(() => {});
+              } catch(e) {}
+            }
+            return res;
+          })
+          .catch(() => null); // null = offline
 
         // If we have a cached response, serve it immediately and revalidate in background
         if (cached) {

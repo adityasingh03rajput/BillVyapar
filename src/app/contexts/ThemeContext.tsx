@@ -35,8 +35,13 @@ type LegacyMediaQueryList = MediaQueryList & {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'light';
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw === 'light' || raw === 'dark' || raw === 'system' || raw === 'warm' || raw === 'ocean' || raw === 'emerald' || raw === 'rosewood') return raw;
+    try {
+      const rawProf = window.localStorage.getItem('currentProfile');
+      const pid = rawProf ? JSON.parse(rawProf)?.id : '';
+      const key = pid ? `${STORAGE_KEY}_${pid}` : STORAGE_KEY;
+      const raw = window.localStorage.getItem(key) || window.localStorage.getItem(STORAGE_KEY);
+      if (raw === 'light' || raw === 'dark' || raw === 'system' || raw === 'warm' || raw === 'ocean' || raw === 'emerald' || raw === 'rosewood') return raw;
+    } catch(e) {}
     return 'dark';
   });
 
@@ -83,8 +88,32 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = (next: ThemeMode) => {
     setThemeState(next);
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(STORAGE_KEY, next);
+    try {
+      const rawProf = window.localStorage.getItem('currentProfile');
+      const pid = rawProf ? JSON.parse(rawProf)?.id : '';
+      const key = pid ? `${STORAGE_KEY}_${pid}` : STORAGE_KEY;
+      window.localStorage.setItem(key, next);
+    } catch(e) {
+      window.localStorage.setItem(STORAGE_KEY, next);
+    }
   };
+
+  // Listen to profile switches to dynamically update theme to the profile's saved theme
+  useEffect(() => {
+    const handleProfileSwitch = () => {
+      try {
+        const rawProf = window.localStorage.getItem('currentProfile');
+        const pid = rawProf ? JSON.parse(rawProf)?.id : '';
+        const key = pid ? `${STORAGE_KEY}_${pid}` : STORAGE_KEY;
+        const stored = window.localStorage.getItem(key);
+        if (stored && (stored === 'light' || stored === 'dark' || stored === 'system' || stored === 'warm' || stored === 'ocean' || stored === 'emerald' || stored === 'rosewood')) {
+          setThemeState(stored as ThemeMode);
+        }
+      } catch(e) {}
+    };
+    window.addEventListener('profileChanged', handleProfileSwitch);
+    return () => window.removeEventListener('profileChanged', handleProfileSwitch);
+  }, []);
 
   const value = useMemo<ThemeContextValue>(() => ({ theme, setTheme, resolvedTheme }), [resolvedTheme, theme]);
 
