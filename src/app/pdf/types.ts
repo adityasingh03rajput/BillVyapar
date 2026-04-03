@@ -1,4 +1,4 @@
-export type PdfTemplateId = 'classic' | 'modern' | 'minimal' | 'professional' | 'corporate' | 'ledger' | 'elegant' | 'boldtype';
+export type PdfTemplateId = 'classic' | 'modern' | 'minimal' | 'professional' | 'corporate' | 'ledger' | 'elegant' | 'boldtype' | 'gstinvoice';
 
 export type DocumentItem = {
   name: string;

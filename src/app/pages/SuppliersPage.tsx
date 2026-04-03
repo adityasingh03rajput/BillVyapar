@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Plus, Search, Building2, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { API_URL } from '../config/api';
+import { API_URL, mkCacheKey } from '../config/api';
 import {
   hasContactErrors,
   normalizeEmail,
@@ -43,22 +43,12 @@ interface Supplier {
 }
 
 function readSuppliersCacheSync(): Supplier[] {
-  try {
-    const raw = localStorage.getItem('currentProfile');
-    if (!raw) return [];
-    const p = JSON.parse(raw);
-    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
-    if (!profileId) return [];
-    const entry = localStorage.getItem(`cache:suppliers:${profileId}`);
-    if (!entry) return [];
-    const parsed = JSON.parse(entry);
-    return Array.isArray(parsed?.data) ? parsed.data : [];
-  } catch { return []; }
+  return [];
 }
 
 export function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => readSuppliersCacheSync());
-  const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>(() => readSuppliersCacheSync());
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [formData, setFormData] = useState<Partial<Supplier>>({});
@@ -67,7 +57,7 @@ export function SuppliersPage() {
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<Supplier>>({});
   const [editFormErrors, setEditFormErrors] = useState<{ gstin?: string; phone?: string; email?: string }>({});
-  const [loading, setLoading] = useState(() => readSuppliersCacheSync().length === 0);
+  const [loading, setLoading] = useState(true);
   const [gstinLoading, setGstinLoading] = useState(false);
   const [gstinLookupLoading, setGstinLookupLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -79,34 +69,16 @@ export function SuppliersPage() {
 
   const apiUrl = API_URL;
   const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const profileId = currentProfile?.id;
+  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
 
-  const suppliersCacheKey = profileId ? `cache:suppliers:${profileId}` : null;
-  const SUPPLIERS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
-
-  const readSuppliersCache = () => {
-    if (!suppliersCacheKey) return null;
-    try {
-      const raw = localStorage.getItem(suppliersCacheKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      const ts = Number(parsed?.ts || 0);
-      const data = Array.isArray(parsed?.data) ? parsed.data : null;
-      if (!data || !ts) return null;
-      return { ts, data } as { ts: number; data: Supplier[] };
-    } catch {
-      return null;
-    }
-  };
-
-  const writeSuppliersCache = (data: Supplier[]) => {
-    if (!suppliersCacheKey) return;
-    try {
-      localStorage.setItem(suppliersCacheKey, JSON.stringify({ ts: Date.now(), data }));
-    } catch {
-      // ignore
-    }
-  };
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const newId = (e as CustomEvent)?.detail?.id;
+      if (newId && newId !== profileId) setProfileId(newId);
+    };
+    window.addEventListener('profileRefreshed', handler);
+    return () => window.removeEventListener('profileRefreshed', handler);
+  }, [profileId]);
 
   const handleGstinLookupAutofill = async (target: 'create' | 'edit') => {
     if (!accessToken || !deviceId || !profileId) return;
@@ -167,12 +139,7 @@ export function SuppliersPage() {
   };
 
   const clearSuppliersCache = () => {
-    if (!suppliersCacheKey) return;
-    try {
-      localStorage.removeItem(suppliersCacheKey);
-    } catch {
-      // ignore
-    }
+    // no-op: cache removed
   };
 
   const fileToDataUrl = (file: File) =>
@@ -235,17 +202,7 @@ export function SuppliersPage() {
 
   const loadSuppliers = async ({ force = false }: { force?: boolean } = {}) => {
     if (!accessToken || !deviceId || !profileId) return;
-
-    const cached = force ? null : readSuppliersCache();
-    const isFresh = cached ? Date.now() - cached.ts < SUPPLIERS_CACHE_TTL_MS : false;
-
-    if (cached?.data?.length) {
-      setSuppliers(cached.data);
-      setLoading(false);
-      if (isFresh && !force) return;
-    } else {
-      setLoading(true);
-    }
+    setLoading(true);
 
     try {
       const response = await fetch(`${apiUrl}/suppliers`, {
@@ -254,7 +211,6 @@ export function SuppliersPage() {
       const data = await response.json();
       if (!data.error) {
         setSuppliers(data);
-        if (Array.isArray(data)) writeSuppliersCache(data);
       }
     } catch {
       if (!suppliers.length) toast.error('Failed to load suppliers');

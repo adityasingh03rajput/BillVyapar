@@ -1,10 +1,11 @@
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect, useCallback, type ChangeEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { DateRangePicker, type DateRange } from '../components/ui/date-range-picker';
 import { 
   Select,
   SelectContent,
@@ -31,11 +32,12 @@ import {
   CheckCircle2,
   Clock,
   FileX,
-  Trash2
+  Trash2,
+  Calendar
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsNative } from '../hooks/useIsNative';
-import { API_URL } from '../config/api';
+import { API_URL, mkCacheKey } from '../config/api';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 import { DocumentsPageSkeleton } from '../components/PageSkeleton';
@@ -47,25 +49,13 @@ import QRCode from 'qrcode';
 
 /** Read documents from localStorage synchronously — used to seed state before first render */
 function readDocsCacheSync(): any[] {
-  try {
-    const raw = localStorage.getItem('currentProfile');
-    if (!raw) return [];
-    const profile = JSON.parse(typeof JSON.parse(raw) === 'string' ? JSON.parse(raw) : raw);
-    const profileId = profile?.id;
-    if (!profileId) return [];
-    const entry = localStorage.getItem(`cache:documents:${profileId}`);
-    if (!entry) return [];
-    const parsed = JSON.parse(entry);
-    return Array.isArray(parsed?.data) ? parsed.data : [];
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export function DocumentsPage() {
-  const [documents, setDocuments] = useState<any[]>(() => readDocsCacheSync());
-  const [filteredDocs, setFilteredDocs] = useState<any[]>(() => readDocsCacheSync());
-  const [loading, setLoading] = useState(() => readDocsCacheSync().length === 0);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [filteredDocs, setFilteredDocs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [totalDocs, setTotalDocs] = useState(0);
@@ -77,6 +67,7 @@ export function DocumentsPage() {
   const [partyFilter, setPartyFilter] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
   const { accessToken, deviceId } = useAuth();
   const isNative = useIsNative();
   const navigate = useNavigate();
@@ -209,7 +200,6 @@ export function DocumentsPage() {
 
       setDocuments((prev) => prev.filter((d) => d.id !== deleteDoc.id));
       setFilteredDocs((prev) => prev.filter((d) => d.id !== deleteDoc.id));
-      clearDocsCache();
       toast.success('Document deleted');
       setDeleteDialogOpen(false);
       setDeleteDoc(null);
@@ -284,43 +274,17 @@ export function DocumentsPage() {
   };
 
   const currentProfile = readCurrentProfile();
-  const profileId = currentProfile?.id;
+  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
 
-  const docsCacheKey = profileId ? `cache:documents:${profileId}` : null;
-  const DOCS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
-
-  const readDocsCache = () => {
-    if (!docsCacheKey) return null;
-    try {
-      const raw = localStorage.getItem(docsCacheKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      const ts = Number(parsed?.ts || 0);
-      const data = Array.isArray(parsed?.data) ? parsed.data : null;
-      if (!data || !ts) return null;
-      return { ts, data };
-    } catch {
-      return null;
-    }
-  };
-
-  const writeDocsCache = (data: any[]) => {
-    if (!docsCacheKey) return;
-    try {
-      localStorage.setItem(docsCacheKey, JSON.stringify({ ts: Date.now(), data }));
-    } catch {
-      // ignore
-    }
-  };
-
-  const clearDocsCache = () => {
-    if (!docsCacheKey) return;
-    try {
-      localStorage.removeItem(docsCacheKey);
-    } catch {
-      // ignore
-    }
-  };
+  // Re-fetch when AppLayout resolves a stale/new profile
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const newId = (e as CustomEvent)?.detail?.id;
+      if (newId && newId !== profileId) setProfileId(newId);
+    };
+    window.addEventListener('profileRefreshed', handler);
+    return () => window.removeEventListener('profileRefreshed', handler);
+  }, [profileId]);
 
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfTemplateId, setPdfTemplateId] = useState<PdfTemplateId>('classic');
@@ -411,59 +375,59 @@ export function DocumentsPage() {
   const [reminderMessage, setReminderMessage] = useState('');
   const [reminderSending, setReminderSending] = useState(false);
 
-  useEffect(() => {
+  const loadDocuments = useCallback(async ({ force = false, skip = 0 }: { force?: boolean, skip?: number } = {}) => {
     if (!accessToken || !deviceId || !profileId) return;
-    loadDocuments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, deviceId, profileId]);
-
-  useEffect(() => {
-    filterDocuments();
-  }, [documents, searchTerm, partyFilter, filterType, filterStatus]);
-
-  const loadDocuments = async ({ force = false }: { force?: boolean } = {}) => {
-    if (!accessToken || !deviceId || !profileId) return;
-    const cached = force ? null : readDocsCache();
-    // Cache is fresh only if it's recent AND it has either a full page of items, 
-    // or we've verified it's exactly the total amount. Since total isn't cached here easily,
-    // if we have < PAGE_SIZE items (like the 5 seeded from dashboard), we refresh in background.
-    const isFresh = cached && (Date.now() - cached.ts < DOCS_CACHE_TTL_MS) && cached.data.length >= PAGE_SIZE;
-
-    if (cached?.data?.length) {
-      setDocuments(cached.data);
-      filterDocuments(cached.data);
-      setLoading(false);
-      if (isFresh) return;
-      // Stale/Incomplete — revalidate in background without showing spinner
-    } else {
-      setLoading(true);
-    }
+    setLoading(true);
 
     try {
+      const p = `profileId=${profileId}`;
+      const t = filterType !== 'all' ? `&type=${filterType}` : '';
+      const s = filterStatus !== 'all' ? `&status=${filterStatus}` : '';
+      const d = (dateRange.from || dateRange.to) 
+        ? `&from=${encodeURIComponent(dateRange.from)}&to=${encodeURIComponent(dateRange.to)}` 
+        : '';
+
       const response = await fetch(
-        `${apiUrl}/documents?limit=${PAGE_SIZE}&skip=0`,
-        { headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId } }
+        `${apiUrl}/documents?limit=${PAGE_SIZE}&skip=${skip}&${p}${t}${s}${d}`,
+        { 
+          headers: { 
+            'Authorization': `Bearer ${accessToken}`, 
+            'X-Device-ID': deviceId, 
+            'X-Profile-ID': profileId,
+            'Cache-Control': 'no-cache',
+          } 
+        }
       );
-      const json = await response.json();
-      if (json.error) {
-        toast.error(json.error);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        toast.error(err?.error || `Failed to load documents (${response.status})`);
         return;
       }
-      // Support both old array response and new paginated response
+      const json = await response.json();
       const data: any[] = Array.isArray(json) ? json : (json.data ?? []);
       const total: number = json.total ?? data.length;
       const more: boolean = json.hasMore ?? false;
-      setDocuments(data);
-      filterDocuments(data);
+      
+      if (skip === 0) {
+        setDocuments(data);
+        filterDocuments(data);
+      } else {
+        const merged = [...documents, ...data];
+        setDocuments(merged);
+        filterDocuments(merged);
+      }
       setTotalDocs(total);
       setHasMore(more);
-      writeDocsCache(data);
     } catch {
       if (!documents.length) toast.error('Failed to load documents');
     } finally {
       setLoading(false);
     }
-  };
+  }, [accessToken, deviceId, profileId, filterType, filterStatus, dateRange, apiUrl]);
+
+  useEffect(() => {
+    loadDocuments({ skip: 0 });
+  }, [loadDocuments]);
 
   const loadMoreDocuments = async () => {
     if (!accessToken || !deviceId || !profileId || loadingMore || !hasMore) return;
@@ -481,7 +445,6 @@ export function DocumentsPage() {
       filterDocuments(merged);
       setHasMore(json.hasMore ?? false);
       setTotalDocs(json.total ?? merged.length);
-      writeDocsCache(merged);
     } catch {
       toast.error('Failed to load more documents');
     } finally {
@@ -1551,7 +1514,7 @@ export function DocumentsPage() {
         {/* Filters */}
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <div className="grid md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -1567,6 +1530,8 @@ export function DocumentsPage() {
                 value={partyFilter}
                 onChange={(e) => setPartyFilter(e.target.value)}
               />
+
+              <DateRangePicker range={dateRange} onRangeChange={setDateRange} align="start" />
 
               <Select value={filterType} onValueChange={setFilterType}>
                 <SelectTrigger>

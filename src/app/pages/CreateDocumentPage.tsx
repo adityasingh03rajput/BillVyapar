@@ -26,7 +26,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../components/ui/collapsible';
-import { Check, ChevronDown, ChevronUp, ChevronsUpDown, Plus, Save, Trash2, ArrowLeft } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, ChevronsUpDown, Plus, Save, Trash2, ArrowLeft, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
@@ -266,7 +267,7 @@ export function CreateDocumentPage() {
   const [termsConditions, setTermsConditions] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<'unpaid' | 'partial' | 'paid'>('unpaid');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
-  const [status, setStatus] = useState<'draft' | 'final'>('draft');
+  const [status, setStatus] = useState<'draft' | 'final'>('final');
   const [receivedAmount, setReceivedAmount] = useState<number>(0);
 
   useEffect(() => {
@@ -1197,8 +1198,8 @@ export function CreateDocumentPage() {
     const discountAmt = parseFloat(((gross * discountPct) / 100).toFixed(2));
     const taxable = parseFloat((gross - discountAmt).toFixed(2));
 
-    if (type === 'proforma' && proformaPriceMode === 'with_tax') {
-      // rate is tax-inclusive; item.total = gross after discount (inclusive of tax)
+    if (proformaPriceMode === 'with_tax') {
+      // rate is tax-inclusive — item.total = gross after discount (no extra tax added)
       return parseFloat(taxable.toFixed(2));
     }
 
@@ -1265,7 +1266,29 @@ export function CreateDocumentPage() {
     const taxableTotal = subtotal - discountTotal;
     const totalBeforeRound = taxableTotal + taxTotal;
     const grandTotal = totalBeforeRound + Number(roundOff || 0);
-    return { subtotal, discountTotal, taxTotal, totalBeforeRound, grandTotal };
+    // Compute CGST/SGST/IGST breakdown for summary tooltips
+    const totalCgst = parseFloat(items.reduce((sum, item) => {
+      const gross = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
+      const taxable = proformaPriceMode === 'with_tax'
+        ? (1 + (item.cgst + item.sgst + item.igst) / 100) > 0 ? gross / (1 + (item.cgst + item.sgst + item.igst) / 100) : gross
+        : gross;
+      return sum + (taxable * item.cgst) / 100;
+    }, 0).toFixed(2));
+    const totalSgst = parseFloat(items.reduce((sum, item) => {
+      const gross = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
+      const taxable = proformaPriceMode === 'with_tax'
+        ? (1 + (item.cgst + item.sgst + item.igst) / 100) > 0 ? gross / (1 + (item.cgst + item.sgst + item.igst) / 100) : gross
+        : gross;
+      return sum + (taxable * item.sgst) / 100;
+    }, 0).toFixed(2));
+    const totalIgst = parseFloat(items.reduce((sum, item) => {
+      const gross = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
+      const taxable = proformaPriceMode === 'with_tax'
+        ? (1 + (item.cgst + item.sgst + item.igst) / 100) > 0 ? gross / (1 + (item.cgst + item.sgst + item.igst) / 100) : gross
+        : gross;
+      return sum + (taxable * item.igst) / 100;
+    }, 0).toFixed(2));
+    return { subtotal, discountTotal, taxTotal, totalBeforeRound, grandTotal, totalCgst, totalSgst, totalIgst };
   };
 
   const handleCreateCustomerInline = async () => {
@@ -1591,6 +1614,15 @@ export function CreateDocumentPage() {
   // grandTotal = subtotal + total taxes + roundOff
   // All amounts rounded to 2dp to prevent float arithmetic drift.
   function calculateTotals() {
+    // Shared tax-inclusive helper: extract taxable base from gross when price includes tax
+    const getTaxable = (gross: number, cgst: number, sgst: number, igst: number) => {
+      if (proformaPriceMode === 'with_tax') {
+        const taxPct = cgst + sgst + igst;
+        return taxPct > 0 ? gross / (1 + taxPct / 100) : gross;
+      }
+      return gross;
+    };
+
     if (type === 'proforma') {
       const rows = items.map(proformaRowComputed);
       const itemsTotal = parseFloat(rows.reduce((s, r) => s + r.amount, 0).toFixed(2));
@@ -1604,10 +1636,7 @@ export function CreateDocumentPage() {
           const discountPct = Number(it.discount || 0);
           const gross = qty * rate;
           const grossAfterDiscount = gross - (gross * discountPct) / 100;
-          const taxPct = Number(it.cgst || 0) + Number(it.sgst || 0) + Number(it.igst || 0);
-          const taxable = proformaPriceMode === 'with_tax'
-            ? (1 + taxPct / 100) > 0 ? grossAfterDiscount / (1 + taxPct / 100) : grossAfterDiscount
-            : grossAfterDiscount;
+          const taxable = getTaxable(grossAfterDiscount, Number(it.cgst || 0), Number(it.sgst || 0), Number(it.igst || 0));
           acc.totalCgst += parseFloat(((taxable * Number(it.cgst || 0)) / 100).toFixed(2));
           acc.totalSgst += parseFloat(((taxable * Number(it.sgst || 0)) / 100).toFixed(2));
           acc.totalIgst += parseFloat(((taxable * Number(it.igst || 0)) / 100).toFixed(2));
@@ -1619,32 +1648,32 @@ export function CreateDocumentPage() {
       return { itemsTotal, subtotal, grandTotal, ...taxBreakup };
     }
 
-    // For each item: taxableAmount = qty * rate - discount. item.total already includes tax.
-    // subtotal = sum of taxable amounts (pre-tax) + extra charges — this is the GSTR taxable value.
-    // grandTotal = sum of item.total (tax-inclusive) + extra charges + roundOff.
+    // For each item: taxableAmount = qty * rate - discount.
+    // with_tax mode: price is tax-inclusive, extract taxable base first.
     const totalCgst = parseFloat(items.reduce((sum, item) => {
-      const taxable = parseFloat(((item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100)).toFixed(2));
+      const gross = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
+      const taxable = getTaxable(gross, item.cgst, item.sgst, item.igst);
       return sum + parseFloat(((taxable * item.cgst) / 100).toFixed(2));
     }, 0).toFixed(2));
 
     const totalSgst = parseFloat(items.reduce((sum, item) => {
-      const taxable = parseFloat(((item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100)).toFixed(2));
+      const gross = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
+      const taxable = getTaxable(gross, item.cgst, item.sgst, item.igst);
       return sum + parseFloat(((taxable * item.sgst) / 100).toFixed(2));
     }, 0).toFixed(2));
 
     const totalIgst = parseFloat(items.reduce((sum, item) => {
-      const taxable = parseFloat(((item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100)).toFixed(2));
+      const gross = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
+      const taxable = getTaxable(gross, item.cgst, item.sgst, item.igst);
       return sum + parseFloat(((taxable * item.igst) / 100).toFixed(2));
     }, 0).toFixed(2));
 
-    // subtotal = pre-tax item amounts + extra charges (taxable base for GSTR)
     const itemsTaxableBase = parseFloat(items.reduce((sum, item) => {
-      const taxable = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
-      return sum + taxable;
+      const gross = (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount) / 100);
+      return sum + getTaxable(gross, item.cgst, item.sgst, item.igst);
     }, 0).toFixed(2));
     const subtotal = parseFloat((itemsTaxableBase + transportCharges + additionalCharges + packingHandlingCharges + tcs).toFixed(2));
 
-    // grandTotal = items (tax-inclusive) + extra charges + roundOff
     const itemsTotal = parseFloat(items.reduce((sum, item) => sum + item.total, 0).toFixed(2));
     const grandTotal = parseFloat((itemsTotal + transportCharges + additionalCharges + packingHandlingCharges + tcs + roundOff).toFixed(2));
 
@@ -1707,12 +1736,13 @@ export function CreateDocumentPage() {
       const normalizedReceivedAmount = Number.isFinite(nextReceivedAmount) ? nextReceivedAmount : 0;
       const totalForPayment = Number(totals.grandTotal || 0);
       const remainingForPayment = Math.max(0, totalForPayment - normalizedReceivedAmount);
+
+      // Use user's manual paymentStatus selection.
+      // Only auto-derive if receivedAmount > 0 and user left it as 'unpaid' (likely forgot to update).
       const derivedPaymentStatus: 'unpaid' | 'partial' | 'paid' =
-        normalizedReceivedAmount <= 0
-          ? 'unpaid'
-          : remainingForPayment > 0 && totalForPayment > 0
-            ? 'partial'
-            : 'paid';
+        normalizedReceivedAmount > 0 && paymentStatus === 'unpaid'
+          ? remainingForPayment > 0 ? 'partial' : 'paid'
+          : paymentStatus;
 
       const documentData: any = {
         type,
@@ -1821,7 +1851,13 @@ export function CreateDocumentPage() {
       const data = await response.json();
       
       if (data.error) {
-        toast.error(data.error);
+        if (data.code === 'FINAL_DOCUMENT_LOCKED') {
+          // Document was finalized in DB — revert to draft and let user re-save
+          setStatus('draft');
+          toast.info('Status reverted to Draft. You can now edit and re-save.', { duration: 4000 });
+        } else {
+          toast.error(data.error);
+        }
       } else {
         toast.success(isEdit ? 'Document updated!' : 'Document created!');
         navigate('/documents');
@@ -1865,6 +1901,20 @@ export function CreateDocumentPage() {
       <div className="bg-muted/30">
       <div>
         <div className="space-y-4">
+            {/* Finalized document warning banner */}
+            {isEdit && status === 'final' && (
+              <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3">
+                <span className="text-amber-600 text-lg">🔒</span>
+                <div className="flex-1 text-sm text-amber-800 dark:text-amber-300">
+                  This document is <strong>Finalized</strong>. Financial fields (items, totals, taxes) are locked.
+                  Change Status to <strong>Draft</strong> to make changes.
+                </div>
+                <Button size="sm" variant="outline" className="border-amber-400 text-amber-800 hover:bg-amber-100 shrink-0"
+                  onClick={() => setStatus('draft')}>
+                  Revert to Draft
+                </Button>
+              </div>
+            )}
             <Card className="shadow-sm">
               <CardContent className="p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1907,40 +1957,63 @@ export function CreateDocumentPage() {
                         <div className="rounded-md border bg-background p-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-muted-foreground">Invoice Metadata</Label>
+                              <Label>Invoice Metadata</Label>
                               <Switch checked={showInvoiceMetadata} onCheckedChange={setShowInvoiceMetadata} />
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-muted-foreground">Shipping & Logistics</Label>
+                              <Label>Shipping & Logistics</Label>
                               <Switch checked={showShippingLogistics} onCheckedChange={setShowShippingLogistics} />
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-muted-foreground">Bank Details</Label>
+                              <Label>Bank Details</Label>
                               <Switch checked={showBankDetails} onCheckedChange={setShowBankDetails} />
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-muted-foreground">Terms & Notes</Label>
+                              <Label>Terms & Notes</Label>
                               <Switch checked={showTermsNotes} onCheckedChange={setShowTermsNotes} />
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-muted-foreground">Payment</Label>
+                              <Label>Payment</Label>
                               <Switch checked={showPaymentBox} onCheckedChange={setShowPaymentBox} />
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-muted-foreground">Charges</Label>
+                              <Label>Charges</Label>
                               <Switch checked={showCharges} onCheckedChange={setShowCharges} />
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <Label>Price Mode</Label>
+                              <Select value={proformaPriceMode} onValueChange={(v) => {
+                                setProformaPriceMode(v as any);
+                                setItems(prev => prev.map(item => {
+                                  const qty = Number(item.quantity || 0);
+                                  const rate = Number(item.rate || 0);
+                                  const discountPct = Number(item.discount || 0);
+                                  const gross = qty * rate;
+                                  const discountAmt = (gross * discountPct) / 100;
+                                  const taxable = gross - discountAmt;
+                                  if (v === 'with_tax') {
+                                    return { ...item, total: parseFloat(taxable.toFixed(2)) };
+                                  }
+                                  const cgst = Number(item.cgst || 0);
+                                  const sgst = Number(item.sgst || 0);
+                                  const igst = Number(item.igst || 0);
+                                  const tax = (taxable * (cgst + sgst + igst)) / 100;
+                                  return { ...item, total: parseFloat((taxable + tax).toFixed(2)) };
+                                }));
+                              }}>
+                                <SelectTrigger size="sm" className="w-[140px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="without_tax">+ Tax on top</SelectItem>
+                                  <SelectItem value="with_tax">Tax included</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           </div>
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
-                    <Button type="button" variant="outline" onClick={() => navigate('/documents')}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleSave} disabled={saving} className="px-5">
-                      <Save className="h-4 w-4 mr-2" />
-                      {saving ? 'Saving...' : 'Save'}
-                    </Button>
                   </div>
                 </div>
 
@@ -2080,9 +2153,19 @@ export function CreateDocumentPage() {
                         {partyContactErrors.gstin ? <div className="text-xs text-destructive">{partyContactErrors.gstin}</div> : null}
                       </div>
 
-                      <div className="md:col-span-2 space-y-2">
+                      <div className="space-y-2">
                         <Label>Billing Address</Label>
                         <Textarea value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} rows={2} />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Ship To</Label>
+                        <Textarea
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                          rows={2}
+                          placeholder="Enter shipping address"
+                        />
                       </div>
 
                       <div className="space-y-2">
@@ -2111,6 +2194,7 @@ export function CreateDocumentPage() {
                         />
                         {partyContactErrors.phone ? <div className="text-xs text-destructive">{partyContactErrors.phone}</div> : null}
                       </div>
+
                       <div className="space-y-2">
                         <Label>Email</Label>
                         <Input
@@ -2127,26 +2211,16 @@ export function CreateDocumentPage() {
                               gstin: String(customerGstin || ''),
                               phone: String(customerMobile || ''),
                               email: normalized,
-                            });
-                            setPartyContactErrors((p) => ({ ...p, email: errs.email }));
-                          }}
-                        />
-                        {partyContactErrors.email ? <div className="text-xs text-destructive">{partyContactErrors.email}</div> : null}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>State Code</Label>
-                        <Input value={customerStateCode} onChange={(e) => setCustomerStateCode(e.target.value)} />
-                      </div>
-
-                      <div className="md:col-span-2 space-y-2">
-                        <Label>Ship To</Label>
-                        <Textarea
-                          value={deliveryAddress}
-                          onChange={(e) => setDeliveryAddress(e.target.value)}
-                          rows={2}
-                          placeholder="Enter shipping address"
-                        />
-                      </div>
+                              });
+                              setPartyContactErrors((p) => ({ ...p, email: errs.email }));
+                            }}
+                          />
+                          {partyContactErrors.email ? <div className="text-xs text-destructive">{partyContactErrors.email}</div> : null}
+                        </div>
+                        <div className="space-y-2">
+                          <Label>State Code</Label>
+                          <Input value={customerStateCode} onChange={(e) => setCustomerStateCode(e.target.value)} />
+                        </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -2243,7 +2317,7 @@ export function CreateDocumentPage() {
                   <CardTitle className="text-base">Shipping & Logistics</CardTitle>
                 </CardHeader>
                 <CardContent className="p-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-2">
                       <Label>E-Way Bill No</Label>
                       <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} />
@@ -2264,9 +2338,6 @@ export function CreateDocumentPage() {
                       <Label>Vehicle No</Label>
                       <Input value={ewayBillVehicleNo} onChange={(e) => setEwayBillVehicleNo(e.target.value)} />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
                     <div className="space-y-2">
                       <Label>Transporter Doc No</Label>
                       <Input value={ewayBillTransporterDocNo} onChange={(e) => setEwayBillTransporterDocNo(e.target.value)} />
@@ -2279,7 +2350,7 @@ export function CreateDocumentPage() {
                       <Label>Transport</Label>
                       <Input value={transport} onChange={(e) => setTransport(e.target.value)} />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 lg:col-span-1">
                       <Label>Transport ID</Label>
                       <Input value={transportId} onChange={(e) => setTransportId(e.target.value)} />
                     </div>
@@ -2292,41 +2363,62 @@ export function CreateDocumentPage() {
               <CardContent className="p-0">
                 <div className="w-full overflow-auto">
                   <div className="min-w-[1100px]">
-                    <div className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] sticky top-0 z-10 bg-muted/50 backdrop-blur supports-[backdrop-filter]:bg-muted/40 text-xs font-semibold text-muted-foreground border-b">
+                    <div className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] sticky top-0 z-[1] bg-muted/50 backdrop-blur supports-[backdrop-filter]:bg-muted/40 text-xs font-semibold text-muted-foreground border-b">
                       <div className="px-2 py-2">#</div>
                       <div className="px-2 py-2">ITEM</div>
                       <div className="px-2 py-2">QTY</div>
                       <div className="px-2 py-2">UNIT</div>
                       <div className="px-2 py-2">
-                        <div>PRICE/UNIT</div>
-                        <Select value={proformaPriceMode} onValueChange={(v) => setProformaPriceMode(v as any)}>
-                          <SelectTrigger size="sm" className="mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="without_tax">Without Tax</SelectItem>
-                            <SelectItem value="with_tax">With Tax</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex items-center gap-1">
+                          PRICE/UNIT
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="text-xs max-w-[220px]">
+                                <p className="font-semibold mb-1">Price Mode</p>
+                                <p><strong>+ Tax on top:</strong> Price before GST. Tax is added on top. (₹2500 + 18% = ₹2950)</p>
+                                <p className="mt-1"><strong>Tax included:</strong> Price includes GST. (₹2500 total, tax extracted)</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                       </div>
                       <div className="px-2 py-2 col-span-2">DISCOUNT</div>
-                      <div className="px-2 py-2 col-span-2">TAX</div>
-                      <div className="px-2 py-2 text-right">AMOUNT</div>
+                      <div className="px-2 py-2 col-span-2 flex items-center gap-1">
+                        TAX
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs max-w-[220px]">
+                              <p className="font-semibold mb-1">GST Tax Rates</p>
+                              <p>Enter CGST%, SGST%, IGST% individually.</p>
+                              <p className="mt-1">For intra-state: use CGST + SGST (e.g. 9+9 = 18%)</p>
+                              <p className="mt-1">For inter-state: use IGST only (e.g. 18%)</p>
+                              <p className="mt-1 text-yellow-400">Set to 0 for no tax on this item.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <div className="px-2 py-2 text-right flex items-center justify-end gap-1">
+                        AMOUNT
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs max-w-[200px]">
+                              Hover the ⓘ on each row to see the full tax breakdown for that item.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <div className="px-2 py-2" />
                     </div>
-                    <div className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] bg-muted/25 text-[10px] font-medium text-muted-foreground border-b">
-                      <div className="px-2 py-2" />
-                      <div className="px-2 py-2" />
-                      <div className="px-2 py-2" />
-                      <div className="px-2 py-2" />
-                      <div className="px-2 py-2" />
-                      <div className="px-2 py-2">%</div>
-                      <div className="px-2 py-2">AMOUNT</div>
-                      <div className="px-2 py-2">%</div>
-                      <div className="px-2 py-2">AMOUNT</div>
-                      <div className="px-2 py-2" />
-                      <div className="px-2 py-2" />
-                    </div>
+
 
                     {items.map((it, idx) => {
                       const row = proformaRowComputed(it);
@@ -2439,10 +2531,12 @@ export function CreateDocumentPage() {
                               }}
                             />
                           </div>
+                          {/* TAX — clean dropdown + popover for CGST/SGST/IGST editing */}
                           <div className="px-2 py-2">
                             <Select
-                              value={String(row.taxPct)}
+                              value={['0','5','12','18','28'].includes(String(row.taxPct)) ? String(row.taxPct) : 'custom'}
                               onValueChange={(v) => {
+                                if (v === 'custom') return;
                                 const next = Number(v || 0);
                                 const half = parseFloat((next / 2).toFixed(2));
                                 updateItem(idx, 'igst', 0);
@@ -2451,20 +2545,69 @@ export function CreateDocumentPage() {
                               }}
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="Select" />
+                                <span>{row.taxPct === 0 ? 'No Tax' : `${row.taxPct}% GST`}</span>
                               </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0">0%</SelectItem>
-                                <SelectItem value="5">5%</SelectItem>
-                                <SelectItem value="12">12%</SelectItem>
-                                <SelectItem value="18">18%</SelectItem>
-                                <SelectItem value="28">28%</SelectItem>
+                              <SelectContent side="top">
+                                <SelectItem value="0">0% — No Tax</SelectItem>
+                                <SelectItem value="5">5% GST</SelectItem>
+                                <SelectItem value="12">12% GST</SelectItem>
+                                <SelectItem value="18">18% GST</SelectItem>
+                                <SelectItem value="28">28% GST</SelectItem>
+                                {!['0','5','12','18','28'].includes(String(row.taxPct)) && (
+                                  <SelectItem value="custom">{row.taxPct}% (custom)</SelectItem>
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
+                          {/* TAX AMOUNT — click to edit CGST/SGST/IGST individually */}
                           <div className="px-2 py-2">
-                            <Input readOnly value={Number(row.taxAmount || 0).toFixed(2)} />
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button type="button" className="w-full text-left">
+                                  <Input
+                                    readOnly
+                                    value={Number(row.taxAmount || 0).toFixed(2)}
+                                    className="cursor-pointer bg-muted/20 hover:bg-muted/40 transition-colors"
+                                    title="Click to edit CGST/SGST/IGST"
+                                  />
+                                  {row.taxPct > 0 && (
+                                    <div className="text-[9px] text-muted-foreground mt-0.5">
+                                      {it.cgst > 0 && `CGST ${it.cgst}%`}
+                                      {it.cgst > 0 && it.sgst > 0 && ' · '}
+                                      {it.sgst > 0 && `SGST ${it.sgst}%`}
+                                      {(it.cgst > 0 || it.sgst > 0) && it.igst > 0 && ' · '}
+                                      {it.igst > 0 && `IGST ${it.igst}%`}
+                                    </div>
+                                  )}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent side="left" className="w-56 p-3 space-y-3">
+                                <p className="text-xs font-semibold text-foreground">Edit Tax Rates</p>
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground w-12">CGST %</label>
+                                    <Input type="number" min={0} max={50} step={0.5} className="h-7 text-xs"
+                                      value={it.cgst}
+                                      onChange={(e) => updateItem(idx, 'cgst', Number(e.target.value || 0))} />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground w-12">SGST %</label>
+                                    <Input type="number" min={0} max={50} step={0.5} className="h-7 text-xs"
+                                      value={it.sgst}
+                                      onChange={(e) => updateItem(idx, 'sgst', Number(e.target.value || 0))} />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground w-12">IGST %</label>
+                                    <Input type="number" min={0} max={50} step={0.5} className="h-7 text-xs"
+                                      value={it.igst}
+                                      onChange={(e) => updateItem(idx, 'igst', Number(e.target.value || 0))} />
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">Intra-state: CGST + SGST · Inter-state: IGST only</p>
+                              </PopoverContent>
+                            </Popover>
                           </div>
+                          {/* AMOUNT */}
                           <div className="px-2 py-2 text-right font-semibold">
                             {formatInr(row.amount)}
                           </div>
@@ -2493,7 +2636,7 @@ export function CreateDocumentPage() {
                       <div className="px-2 py-2" />
                       <div className="px-2 py-2" />
                       <div className="px-2 py-2 text-right font-semibold">
-                        {formatInr(proformaTotals().grandTotal)}
+                        {formatInr(type === 'proforma' ? proformaTotals().grandTotal : calculateTotals().grandTotal)}
                       </div>
                       <div className="px-2 py-2" />
                     </div>
@@ -2705,18 +2848,40 @@ export function CreateDocumentPage() {
                   <Card className="shadow-sm bg-background/80">
                     <CardContent className="p-4 space-y-3">
                       {(() => {
-                        const t = proformaTotals();
+                        const t = type === 'proforma' ? proformaTotals() : calculateTotals();
                         const received = Math.max(0, Number(receivedAmount || 0));
                         const balance = Math.max(0, Number(t.grandTotal || 0) - received);
+                        const totalTax = (t.totalCgst ?? 0) + (t.totalSgst ?? 0) + (t.totalIgst ?? 0);
                         return (
                           <>
                             <div className="rounded-md overflow-hidden border bg-background">
                               <div className="px-3 py-2 text-sm font-semibold bg-primary/40 text-foreground">Amounts</div>
 
                               <div className="px-3 py-2 border-t flex items-center justify-between text-sm">
-                                <div className="text-muted-foreground">Sub total</div>
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  Sub total
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><Info className="h-3 w-3 cursor-help" /></TooltipTrigger>
+                                    <TooltipContent className="text-xs">Pre-tax total of all items (taxable base)</TooltipContent>
+                                  </Tooltip></TooltipProvider>
+                                </div>
                                 <div className="font-medium">{formatInr(t.subtotal)}</div>
                               </div>
+
+                              {totalTax > 0 && (
+                                <div className="px-3 py-2 border-t flex items-center justify-between text-sm">
+                                  <div className="flex items-center gap-1 text-muted-foreground">
+                                    Tax
+                                    <TooltipProvider><Tooltip><TooltipTrigger asChild><Info className="h-3 w-3 cursor-help" /></TooltipTrigger>
+                                      <TooltipContent className="text-xs space-y-1">
+                                        {(t.totalCgst ?? 0) > 0 && <p>CGST: {formatInr(t.totalCgst ?? 0)}</p>}
+                                        {(t.totalSgst ?? 0) > 0 && <p>SGST: {formatInr(t.totalSgst ?? 0)}</p>}
+                                        {(t.totalIgst ?? 0) > 0 && <p>IGST: {formatInr(t.totalIgst ?? 0)}</p>}
+                                      </TooltipContent>
+                                    </Tooltip></TooltipProvider>
+                                  </div>
+                                  <div className="font-medium">{formatInr(totalTax)}</div>
+                                </div>
+                              )}
 
                               <div className="px-3 py-2 border-t flex items-center justify-between text-sm font-semibold">
                                 <div>Total</div>
@@ -2749,7 +2914,7 @@ export function CreateDocumentPage() {
                       <CardContent className="p-4 space-y-3">
                         {shouldShowPaymentMode && (
                           <div>
-                            <Label className="text-xs text-muted-foreground">Payment Type</Label>
+                            <Label>Payment Type</Label>
                             <div className="flex items-center gap-2 mt-1">
                               <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
                                 <SelectTrigger>
@@ -2777,7 +2942,7 @@ export function CreateDocumentPage() {
                         )}
 
                         <div>
-                          <Label className="text-xs text-muted-foreground">Received Amount</Label>
+                          <Label>Received Amount</Label>
                           <Input
                             type="number"
                             min={0}
@@ -2824,7 +2989,7 @@ export function CreateDocumentPage() {
                           <Input type="number" value={roundOff} onChange={(e) => setRoundOff(Number(e.target.value || 0))} />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs text-muted-foreground">Auto Round Off</Label>
+                          <Label>Auto Round Off</Label>
                           <div className="flex items-center">
                             <Switch checked={autoRoundOff} onCheckedChange={setAutoRoundOff} />
                           </div>
@@ -2837,18 +3002,40 @@ export function CreateDocumentPage() {
                 <Card className="shadow-sm bg-background/80">
                   <CardContent className="p-4 space-y-3">
                     {(() => {
-                      const t = proformaTotals();
+                      const t = type === 'proforma' ? proformaTotals() : calculateTotals();
                       const received = Math.max(0, Number(receivedAmount || 0));
                       const balance = Math.max(0, Number(t.grandTotal || 0) - received);
+                      const totalTax = (t.totalCgst ?? 0) + (t.totalSgst ?? 0) + (t.totalIgst ?? 0);
                       return (
                         <>
                           <div className="rounded-md overflow-hidden border bg-background">
                             <div className="px-3 py-2 text-sm font-semibold bg-primary/40 text-foreground">Amounts</div>
 
                             <div className="px-3 py-2 border-t flex items-center justify-between text-sm">
-                              <div className="text-muted-foreground">Sub total</div>
+                              <div className="flex items-center gap-1 text-muted-foreground">
+                                Sub total
+                                <TooltipProvider><Tooltip><TooltipTrigger asChild><Info className="h-3 w-3 cursor-help" /></TooltipTrigger>
+                                  <TooltipContent className="text-xs">Pre-tax total of all items (taxable base)</TooltipContent>
+                                </Tooltip></TooltipProvider>
+                              </div>
                               <div className="font-medium">{formatInr(t.subtotal)}</div>
                             </div>
+
+                            {totalTax > 0 && (
+                              <div className="px-3 py-2 border-t flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  Tax
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><Info className="h-3 w-3 cursor-help" /></TooltipTrigger>
+                                    <TooltipContent className="text-xs space-y-1">
+                                      {(t.totalCgst ?? 0) > 0 && <p>CGST: {formatInr(t.totalCgst ?? 0)}</p>}
+                                      {(t.totalSgst ?? 0) > 0 && <p>SGST: {formatInr(t.totalSgst ?? 0)}</p>}
+                                      {(t.totalIgst ?? 0) > 0 && <p>IGST: {formatInr(t.totalIgst ?? 0)}</p>}
+                                    </TooltipContent>
+                                  </Tooltip></TooltipProvider>
+                                </div>
+                                <div className="font-medium">{formatInr(totalTax)}</div>
+                              </div>
+                            )}
 
                             <div className="px-3 py-2 border-t flex items-center justify-between text-sm font-semibold">
                               <div>Total</div>

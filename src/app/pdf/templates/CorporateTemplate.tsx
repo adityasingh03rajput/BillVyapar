@@ -7,6 +7,7 @@ import {
   Money,
   TemplateFrame,
   amountInWordsINR,
+  displaySubtotal,
   docTitleFromType,
   formatInlineAddress,
   formatStateDisplay,
@@ -208,7 +209,7 @@ export function CorporateTemplate({ doc, profile }: PdfTemplateProps) {
           <div style={{ flex: 1 }}>
             <div style={{ background: accentLight, borderRadius: 8, padding: '14px 16px', border: `1px solid ${border}` }}>
               <div style={{ fontSize: 10, fontWeight: 900, color: accentMid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Summary</div>
-              <KeyValue label="Subtotal" value={<Money value={Number(doc.subtotal || 0)} />} />
+              <KeyValue label="Subtotal" value={<Money value={displaySubtotal(doc)} />} />
               <KeyValue label="Total Tax" value={<Money value={taxes} />} />
               {Number(doc.transportCharges || 0) > 0 && <KeyValue label="Transport" value={<Money value={Number(doc.transportCharges)} />} />}
               {Number(doc.additionalCharges || 0) > 0 && <KeyValue label="Additional" value={<Money value={Number(doc.additionalCharges)} />} />}

@@ -186,6 +186,28 @@ export function amountInWordsINR(value: number) {
   return `${sign}${r} Rupees${tail} Only`;
 }
 
+/**
+ * Returns the correct pre-tax subtotal for display in PDF summaries.
+ * Some documents (especially migrated from old backend) stored subtotal = grandTotal.
+ * We detect this by checking if subtotal ≈ grandTotal (i.e. taxes weren't subtracted).
+ * In that case we derive the correct value: grandTotal - taxes - roundOff.
+ */
+export function displaySubtotal(doc: any): number {
+  const stored   = Number(doc.subtotal   || 0);
+  const grand    = Number(doc.grandTotal || 0);
+  const taxes    = Number(doc.totalCgst  || 0) + Number(doc.totalSgst || 0) + Number(doc.totalIgst || 0);
+  const roundOff = Number(doc.roundOff   || 0);
+
+  // If stored subtotal already looks like the pre-tax value, use it
+  const expectedPreTax = parseFloat((grand - taxes - roundOff).toFixed(2));
+  if (Math.abs(stored - expectedPreTax) < 0.05) return stored;
+
+  // stored subtotal ≈ grandTotal → it was saved incorrectly; derive correct value
+  if (Math.abs(stored - grand) < 0.05) return expectedPreTax;
+
+  return stored;
+}
+
 export function docTitleFromType(type: string) {
   const t = String(type || '').toLowerCase();
   if (t === 'invoice') return 'TAX INVOICE';

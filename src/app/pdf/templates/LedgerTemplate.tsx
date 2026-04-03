@@ -7,6 +7,7 @@ import {
   Money,
   TemplateFrame,
   amountInWordsINR,
+  displaySubtotal,
   docTitleFromType,
   formatInlineAddress,
   formatStateDisplay,
@@ -223,7 +224,7 @@ export function LedgerTemplate({ doc, profile }: PdfTemplateProps) {
         <div style={{ width: 220, padding: '12px 14px' }}>
           <div style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1, color: '#6B7280', marginBottom: 8 }}>Summary</div>
           {[
-            { label: 'Subtotal', value: Number(doc.subtotal || 0) },
+            { label: 'Subtotal', value: displaySubtotal(doc) },
             { label: 'CGST', value: cgst, hide: cgst === 0 },
             { label: 'SGST', value: sgst, hide: sgst === 0 },
             { label: 'IGST', value: igst, hide: igst === 0 },

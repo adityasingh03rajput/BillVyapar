@@ -7,7 +7,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Plus, Search, Package, Tag, Edit } from 'lucide-react';
 import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
 import { useAuth } from '../contexts/AuthContext';
-import { API_URL } from '../config/api';
+import { API_URL, mkCacheKey } from '../config/api';
 import { toast } from 'sonner';
 import { ItemsPageSkeleton } from '../components/PageSkeleton';
 
@@ -27,22 +27,12 @@ interface Item {
 }
 
 function readItemsCacheSync(): Item[] {
-  try {
-    const raw = localStorage.getItem('currentProfile');
-    if (!raw) return [];
-    const p = JSON.parse(raw);
-    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
-    if (!profileId) return [];
-    const entry = localStorage.getItem(`cache:items:${profileId}`);
-    if (!entry) return [];
-    const parsed = JSON.parse(entry);
-    return Array.isArray(parsed?.data) ? parsed.data : [];
-  } catch { return []; }
+  return [];
 }
 
 export function ItemsPage() {
-  const [items, setItems] = useState<Item[]>(() => readItemsCacheSync());
-  const [filteredItems, setFilteredItems] = useState<Item[]>(() => readItemsCacheSync());
+  const [items, setItems] = useState<Item[]>([]);
+  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -58,39 +48,21 @@ export function ItemsPage() {
     sgst: 9,
     igst: 0,
   });
-  const [loading, setLoading] = useState(() => readItemsCacheSync().length === 0);
+  const [loading, setLoading] = useState(true);
   const { accessToken, deviceId } = useAuth();
 
   const apiUrl = API_URL;
   const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const profileId = currentProfile?.id;
+  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
 
-  const itemsCacheKey = profileId ? `cache:items:${profileId}` : null;
-  const ITEMS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
-
-  const readItemsCache = () => {
-    if (!itemsCacheKey) return null;
-    try {
-      const raw = localStorage.getItem(itemsCacheKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      const ts = Number(parsed?.ts || 0);
-      const data = Array.isArray(parsed?.data) ? parsed.data : null;
-      if (!data || !ts) return null;
-      return { ts, data } as { ts: number; data: Item[] };
-    } catch {
-      return null;
-    }
-  };
-
-  const writeItemsCache = (data: Item[]) => {
-    if (!itemsCacheKey) return;
-    try {
-      localStorage.setItem(itemsCacheKey, JSON.stringify({ ts: Date.now(), data }));
-    } catch {
-      // ignore
-    }
-  };
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const newId = (e as CustomEvent)?.detail?.id;
+      if (newId && newId !== profileId) setProfileId(newId);
+    };
+    window.addEventListener('profileRefreshed', handler);
+    return () => window.removeEventListener('profileRefreshed', handler);
+  }, [profileId]);
 
   useEffect(() => {
     if (!accessToken || !deviceId || !profileId) return;
@@ -116,17 +88,7 @@ export function ItemsPage() {
 
   const loadItems = async ({ force = false }: { force?: boolean } = {}) => {
     if (!accessToken || !deviceId || !profileId) return;
-
-    const cached = force ? null : readItemsCache();
-    const isFresh = cached ? Date.now() - cached.ts < ITEMS_CACHE_TTL_MS : false;
-
-    if (cached?.data?.length) {
-      setItems(cached.data);
-      setLoading(false);
-      if (isFresh && !force) return;
-    } else {
-      setLoading(true);
-    }
+    setLoading(true);
 
     try {
       const response = await fetch(`${apiUrl}/items`, {
@@ -135,7 +97,6 @@ export function ItemsPage() {
       const data = await response.json();
       if (!data.error) {
         setItems(data);
-        if (Array.isArray(data)) writeItemsCache(data);
       }
     } catch (error) {
       if (!items.length) toast.error('Failed to load items');

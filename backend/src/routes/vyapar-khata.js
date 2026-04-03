@@ -51,15 +51,25 @@ vyaparKhataRouter.get('/summary', async (req, res, next) => {
       return res.json({ youWillGive: 0, youWillGet: 0 });
     }
 
-    const agg = await VyaparKhataTransaction.aggregate([
-      {
-        $match: {
-          userId: userObjectId,
-          profileId: profileObjectId,
-          partyType,
-          partyId: { $in: partyIds },
-        },
+    const agg = [{
+      $match: {
+        userId: userObjectId,
+        profileId: profileObjectId,
+        partyType,
+        partyId: { $in: partyIds },
       },
+    }];
+
+    const { from, to } = req.query || {};
+    if (from || to) {
+      const dateFilter = {};
+      if (from) dateFilter.$gte = new Date(String(from));
+      if (to)   dateFilter.$lte = new Date(String(to));
+      agg[0].$match.date = dateFilter;
+    }
+
+    const result = await VyaparKhataTransaction.aggregate([
+      ...agg,
       {
         $group: {
           _id: { partyId: '$partyId', direction: '$direction' },
@@ -247,12 +257,21 @@ vyaparKhataRouter.get('/party/:partyId/entries', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid partyId' });
     }
 
-    const rows = await VyaparKhataTransaction.find({
+    const { from, to } = req.query || {};
+    const filter = {
       userId: req.userId,
       profileId: req.profileId,
       partyType,
       partyId: new mongoose.Types.ObjectId(partyId),
-    })
+    };
+
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(String(from));
+      if (to)   filter.date.$lte = new Date(String(to));
+    }
+
+    const rows = await VyaparKhataTransaction.find(filter)
       .sort({ date: -1, createdAt: -1 })
       .lean();
 

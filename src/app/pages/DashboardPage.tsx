@@ -16,128 +16,82 @@ import { API_URL } from '../config/api';
 import { TraceLoader } from '../components/TraceLoader';
 import { GenericPageSkeleton } from '../components/PageSkeleton';
 import { prefetchRoutesOnIdle } from '../hooks/usePrefetch';
-
-function readDashCacheSync() {
-  try {
-    const raw = localStorage.getItem('currentProfile');
-    if (!raw) return null;
-    const p = JSON.parse(raw);
-    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
-    if (!profileId) return null;
-    const entry = localStorage.getItem(`cache:dashboard:${profileId}`);
-    if (!entry) return null;
-    const parsed = JSON.parse(entry);
-    if (!parsed?.ts) return null;
-    return parsed as { ts: number; analytics: any; recentDocs: any[] };
-  } catch { return null; }
-}
+import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 
 export function DashboardPage() {
-  const _initCache = readDashCacheSync();
-  const [analytics, setAnalytics] = useState<any>(_initCache?.analytics ?? null);
-  const [recentDocs, setRecentDocs] = useState<any[]>(_initCache?.recentDocs ?? []);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [recentDocs, setRecentDocs] = useState<any[]>([]);
   const [subscription, setSubscription] = useState<any>(null);
-  const [loading, setLoading] = useState(!_initCache);
+  const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
   const { accessToken, deviceId } = useAuth();
   const navigate = useNavigate();
 
   const apiUrl = API_URL;
-  const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const profileId = currentProfile?.id;
 
-  const DASH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
-  const dashCacheKey = profileId ? `cache:dashboard:${profileId}` : null;
-
-  const readDashCache = () => {
-    if (!dashCacheKey) return null;
+  // Read profileId fresh each time — avoids stale closure issues
+  const getProfileId = () => {
     try {
-      const raw = localStorage.getItem(dashCacheKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed?.ts) return null;
-      // No TTL enforcement — serve stale cache when offline
-      return parsed as { ts: number; analytics: any; recentDocs: any[] };
-    } catch { return null; }
+      const raw = localStorage.getItem('currentProfile');
+      if (!raw) return '';
+      const p = JSON.parse(raw);
+      return (typeof p === 'string' ? JSON.parse(p) : p)?.id ?? '';
+    } catch { return ''; }
   };
 
-  const writeDashCache = (analytics: any, recentDocs: any[]) => {
-    if (!dashCacheKey) return;
-    try {
-      localStorage.setItem(dashCacheKey, JSON.stringify({ ts: Date.now(), analytics, recentDocs }));
-    } catch { /* ignore */ }
-  };
+  const [profileId, setProfileId] = useState<string>(getProfileId);
 
+  // Single effect: load on mount + listen for profile changes
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (profileId) loadDashboardData(profileId, dateRange);
 
-  const loadDashboardData = async () => {
-    // Serve cached data immediately — no loading flash on revisit
-    const cached = readDashCache();
-    if (cached) {
-      setAnalytics(cached.analytics);
-      setRecentDocs(cached.recentDocs);
-      setLoading(false);
-      // Revalidate in background
-      loadDashboardData_network();
-      return;
-    }
-    await loadDashboardData_network();
-  };
+    const onProfileRefreshed = (e: Event) => {
+      const newId = (e as CustomEvent)?.detail?.id;
+      if (newId && newId !== profileId) {
+        setProfileId(newId);
+        loadDashboardData(newId, dateRange);
+      }
+    };
+    window.addEventListener('profileRefreshed', onProfileRefreshed);
+    return () => window.removeEventListener('profileRefreshed', onProfileRefreshed);
+  }, [profileId, accessToken, dateRange]);
 
-  const loadDashboardData_network = async () => {
+  const loadDashboardData = async (pid: string, range: DateRange) => {
+    if (!pid || !accessToken) { setLoading(false); return; }
+    setLoading(true);
     try {
-      const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId };
+      const dates = (range.from || range.to) ? `&from=${range.from}&to=${range.to}` : '';
+      const headers = {
+        'Authorization': `Bearer ${accessToken}`,
+        'X-Device-ID': deviceId,
+        'X-Profile-ID': pid,
+      };
 
-      // Fire all requests in parallel — no sequential waiting
       const [analyticsRes, docsRes, subRes] = await Promise.all([
-        fetch(`${apiUrl}/analytics`, { headers }),
-        fetch(`${apiUrl}/documents?limit=5`, { headers }),
-        profileId
-          ? fetch(`${apiUrl}/subscription/validate`, { headers })
-          : fetch(`${apiUrl}/subscription`, { headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId } }),
+        fetch(`${apiUrl}/analytics?${dates}`, { headers }),
+        fetch(`${apiUrl}/documents?limit=5${dates}`, { headers }),
+        fetch(`${apiUrl}/subscription/validate`, { headers }),
       ]);
 
-      let analyticsData: any = null;
-      if (analyticsRes.status !== 403) {
+      if (analyticsRes.ok) {
         const d = await analyticsRes.json();
-        if (!d.error) analyticsData = d;
-      }
-      if (analyticsData) {
-        setAnalytics(analyticsData);
-        // ── Cross-seed the AnalyticsPage cache so navigating Dashboard→Analytics is instant ──
-        if (profileId) {
-          try {
-            localStorage.setItem(`cache:analytics:${profileId}`, JSON.stringify({ ts: Date.now(), data: analyticsData }));
-          } catch { /* ignore */ }
-        }
+        if (!d.error) setAnalytics(d);
       }
 
-      let recentDocsData: any[] = [];
-      if (docsRes.status !== 403) {
+      if (docsRes.ok) {
         const d = await docsRes.json();
-        const rawArray = Array.isArray(d.data) ? d.data : Array.isArray(d) ? d : [];
-        if (!d.error) recentDocsData = rawArray.slice(0, 5);
-        
-        // ── Cross-seed the DocumentsPage cache so navigating Dashboard→Documents is instant ──
-        if (profileId && rawArray.length > 0) {
-          try {
-            // Seed with all docs we got (it asked for limit=5, so usually 5)
-            localStorage.setItem(`cache:documents:${profileId}`, JSON.stringify({ ts: Date.now(), data: rawArray }));
-          } catch { /* ignore */ }
-        }
-      }
-      setRecentDocs(recentDocsData);
-
-      const subData = await subRes.json();
-      if (!subData?.error) {
-        setSubscription(subData?.subscription ?? subData);
+        const arr = Array.isArray(d.data) ? d.data : Array.isArray(d) ? d : [];
+        setRecentDocs(arr.slice(0, 5));
       }
 
-      writeDashCache(analyticsData, recentDocsData);
+      if (subRes.ok) {
+        const d = await subRes.json();
+        if (!d.error) setSubscription(d?.subscription ?? d);
+      }
+
       prefetchRoutesOnIdle(['/documents', '/customers', '/items', '/analytics']);
     } catch {
-      // ignore
+      // network error — show empty state
     } finally {
       setLoading(false);
     }
@@ -175,14 +129,16 @@ export function DashboardPage() {
             <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
             <p className="text-muted-foreground mt-1">Overview of your business metrics</p>
           </div>
-          <Button
-            disabled={!isSubscriptionActive}
-            onClick={() => navigate('/documents/create')}
-            className="mt-4 md:mt-0"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create Document
-          </Button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-4 md:mt-0">
+            <DateRangePicker range={dateRange} onRangeChange={setDateRange} />
+            <Button
+              disabled={!isSubscriptionActive}
+              onClick={() => navigate('/documents/create')}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Document
+            </Button>
+          </div>
         </div>
 
         {/* Subscription Alert */}

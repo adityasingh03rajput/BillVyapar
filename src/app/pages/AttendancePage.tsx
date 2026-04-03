@@ -8,6 +8,7 @@ import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { TraceLoader } from '../components/TraceLoader';
 import { EmployeeTrackingMap } from '../components/EmployeeTrackingMap';
+import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 
 interface TaskLocation { lat: number | null; lng: number | null; address: string | null; }
 interface Task {
@@ -440,7 +441,12 @@ export function AttendancePage() {
   const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterMonth, setFilterMonth] = useState(todayIST().slice(0, 7));
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    return { from: start, to: end };
+  });
 
   const profileId = (() => {
     try {
@@ -473,18 +479,19 @@ export function AttendancePage() {
     try {
       const params = new URLSearchParams();
       if (profileId) params.set('profileId', profileId);
-      params.set('month', filterMonth);
+      if (dateRange.from) params.set('from', dateRange.from);
+      if (dateRange.to) params.set('to', dateRange.to);
       const res = await fetch(`${API_URL}/attendance?${params}`, { headers });
       const data = await res.json();
       if (Array.isArray(data)) setRecords(data);
     } catch { toast.error('Failed to load attendance history'); }
     finally { setLoading(false); }
-  }, [accessToken, profileId, filterMonth]);
+  }, [accessToken, profileId, dateRange]);
 
   useEffect(() => {
     if (tab === 'today') loadToday();
     else if (tab === 'history') loadHistory();
-  }, [tab, filterMonth, loadToday, loadHistory]);
+  }, [tab, dateRange, loadToday, loadHistory]);
 
   // Auto-refresh today's data every 30 seconds
   useEffect(() => {
@@ -601,15 +608,12 @@ export function AttendancePage() {
         </>
       )}
 
-      {/* ── HISTORY TAB ── */}
+        {/* ── HISTORY TAB ── */}
       {tab === 'history' && (
         <>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">Month</label>
-              <Input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="w-40" />
-            </div>
-            <Button variant="outline" size="sm" onClick={loadHistory} className="gap-1.5">
+          <div className="flex flex-wrap items-center gap-3">
+            <DateRangePicker range={dateRange} onRangeChange={setDateRange} align="start" />
+            <Button variant="outline" size="sm" onClick={loadHistory} className="gap-1.5 h-9 shrink-0">
               <RefreshCw className="h-3.5 w-3.5" />Refresh
             </Button>
           </div>

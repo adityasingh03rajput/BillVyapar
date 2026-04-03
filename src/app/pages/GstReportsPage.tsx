@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { getCurrentFiscalYearRange } from '../utils/fiscal';
+import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 
 type GstReport = {
   range: { from: string | null; to: string | null };
@@ -39,9 +40,7 @@ export function GstReportsPage() {
   const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
   const profileId = currentProfile?.id;
 
-  const { startDate: initialFrom, endDate: initialTo } = getCurrentFiscalYearRange();
-  const [from, setFrom] = useState(initialFrom);
-  const [to, setTo] = useState(initialTo);
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<GstReport | null>(null);
 
@@ -55,18 +54,27 @@ export function GstReportsPage() {
       toast.error('Select a business profile first');
       return;
     }
+    if (dateRange.from && dateRange.to && dateRange.from > dateRange.to) {
+      toast.error('Start date must be before end date');
+      return;
+    }
     setLoading(true);
     try {
       const url = new URL(`${apiUrl}/reports/gst`);
-      if (from) url.searchParams.set('from', from);
-      if (to) url.searchParams.set('to', to);
+      if (dateRange.from) url.searchParams.set('from', dateRange.from);
+      if (dateRange.to) url.searchParams.set('to', dateRange.to);
       const res = await fetch(url.toString(), {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'X-Device-ID': deviceId,
           'X-Profile-ID': profileId,
+          'Cache-Control': 'no-cache',
         },
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `Server error (${res.status})`);
+      }
       const data = await res.json();
       if (data?.error) throw new Error(data.error);
       setReport(data);
@@ -80,7 +88,7 @@ export function GstReportsPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dateRange]);
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto pb-8">
@@ -97,21 +105,11 @@ export function GstReportsPage() {
           <CardDescription>Filter invoices by date</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Stack vertically on mobile so inputs aren't crammed */}
-          <div className="flex flex-col sm:grid sm:grid-cols-3 gap-4">
-            <div>
-              <Label className="mb-1.5 block">From</Label>
-              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </div>
-            <div>
-              <Label className="mb-1.5 block">To</Label>
-              <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-            </div>
-            <div className="flex items-end">
-              <Button onClick={load} disabled={loading} className="w-full">
-                {loading ? 'Loading…' : 'Apply'}
-              </Button>
-            </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <DateRangePicker range={dateRange} onRangeChange={setDateRange} align="start" />
+            <Button onClick={load} disabled={loading} variant="outline" className="h-9 shrink-0 px-4">
+              {loading ? 'Loading…' : 'Refresh'}
+            </Button>
           </div>
         </CardContent>
       </Card>

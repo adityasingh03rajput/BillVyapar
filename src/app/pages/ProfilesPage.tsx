@@ -53,6 +53,8 @@ interface BusinessProfile {
   customFields?: Record<string, any>;
 }
 
+import { clearApiCache } from '../hooks/useApiCache';
+
 export function ProfilesPage() {
   const [profiles, setProfiles] = useState<BusinessProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +125,8 @@ export function ProfilesPage() {
   };
 
   const handleSelectProfile = async (profile: BusinessProfile) => {
+    // Clear all caches before switching profile so stale data never bleeds through
+    await clearApiCache();
     try {
       localStorage.setItem('currentProfile', JSON.stringify(profile));
     } catch {

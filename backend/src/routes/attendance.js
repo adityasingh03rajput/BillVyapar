@@ -378,12 +378,16 @@ attendanceRouter.post('/my/tasks/:taskId/checkout', requireAuth, async (req, res
 // GET /attendance
 attendanceRouter.get('/', requireAuth, async (req, res, next) => {
   try {
-    const { profileId, date, month, employeeId } = req.query;
+    const { profileId, date, month, employeeId, from, to } = req.query;
     const filter = { ownerUserId: req.userId };
     if (profileId) filter.profileId = profileId;
     if (employeeId) filter.employeeId = employeeId;
     if (date) {
       filter.date = String(date);
+    } else if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = String(from);
+      if (to)   filter.date.$lte = String(to);
     } else if (month && /^\d{4}-\d{2}$/.test(String(month))) {
       filter.date = { $gte: `${month}-01`, $lte: `${month}-31` };
     }

@@ -26,6 +26,12 @@ reportsRouter.get('/gst', async (req, res, next) => {
     const from = req.query?.from ? String(req.query.from) : null;
     const to = req.query?.to ? String(req.query.to) : null;
 
+    // Validate date format
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (from && !dateRe.test(from)) return res.status(400).json({ error: 'Invalid from date format. Use YYYY-MM-DD.' });
+    if (to && !dateRe.test(to)) return res.status(400).json({ error: 'Invalid to date format. Use YYYY-MM-DD.' });
+    if (from && to && from > to) return res.status(400).json({ error: 'from date must be before to date.' });
+
     const baseFilter = {
       userId: req.userId,
       profileId: req.profileId,

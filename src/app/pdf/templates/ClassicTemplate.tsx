@@ -14,6 +14,7 @@ import {
   TwoCol,
   docTitleFromType,
   amountInWordsINR,
+  displaySubtotal,
   formatInlineAddress,
   formatStateDisplay,
 } from './TemplateFrame';
@@ -395,7 +396,7 @@ export function ClassicTemplate({ doc, profile }: PdfTemplateProps) {
               <Box>
                 <Label>Summary</Label>
                 <div style={{ marginTop: 10 }}>
-                  <KeyValue label="Subtotal" value={<Money value={Number(doc.subtotal || 0)} />} />
+                  <KeyValue label="Subtotal" value={<Money value={displaySubtotal(doc)} />} />
                   <KeyValue label="Taxes" value={<Money value={taxes} />} />
                   <KeyValue
                     label="Charges"

@@ -11,6 +11,7 @@ import {
   safeText,
   TemplateFrame,
   amountInWordsINR,
+  displaySubtotal,
   formatInlineAddress,
   formatStateDisplay,
 } from './TemplateFrame';
@@ -188,7 +189,7 @@ export function MinimalTemplate({ doc, profile }: PdfTemplateProps) {
       {/* TOTALS */}
       <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
         <div style={{ width: 260 }}>
-          <KeyValue label="Sub Total" value={<Money value={Number(doc.subtotal || 0)} />} />
+          <KeyValue label="Sub Total" value={<Money value={displaySubtotal(doc)} />} />
           <KeyValue label="Taxes" value={<Money value={cgst + sgst + igst} />} />
           <div style={{ marginTop: 8 }}>
             <Hr />

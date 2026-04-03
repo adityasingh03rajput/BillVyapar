@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { exportHtmlPagesToPdf } from '../pdf';
 import { useRef } from 'react';
 import { getCurrentFiscalYearRange } from '../utils/fiscal';
+import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 
 type PartyType = 'customer' | 'supplier';
 
@@ -102,8 +103,7 @@ export function PartyLedgerPage() {
   const [parties, setParties] = useState<Party[]>([]);
   const [partyId, setPartyId] = useState<string>('');
 
-  const [from, setFrom] = useState<string>(() => getCurrentFiscalYearRange().startDate);
-  const [to, setTo] = useState<string>(() => getCurrentFiscalYearRange().endDate);
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
 
   const [loadingParties, setLoadingParties] = useState(true);
   const [loadingStatement, setLoadingStatement] = useState(false);
@@ -161,6 +161,8 @@ export function PartyLedgerPage() {
 
     setLoadingStatement(true);
     try {
+      const from = dateRange.from;
+      const to = dateRange.to;
       const qs = new URLSearchParams({ partyType, partyId, from, to }).toString();
       const res = await fetch(`${apiUrl}/ledger/statement?${qs}`, { headers });
       const data = await res.json().catch(() => ({}));
@@ -252,7 +254,7 @@ export function PartyLedgerPage() {
     const a = document.createElement('a');
     a.href = url;
     const name = String(statement.party?.name || partyLabel).replace(/[^a-z0-9\-_ ]/gi, '_');
-    a.download = `ledger_${name}_${from}_to_${to}.csv`;
+    a.download = `ledger_${name}_${dateRange.from}_to_${dateRange.to}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -273,7 +275,7 @@ export function PartyLedgerPage() {
     try {
       const pages = Array.from(pdfPagesRootRef.current.querySelectorAll<HTMLElement>('[data-ledger-pdf-page]'));
       const name = String(statement.party?.name || partyLabel).replace(/[^a-z0-9\-_ ]/gi, '_');
-      const filename = `ledger_${name}_${from}_to_${to}.pdf`;
+      const filename = `ledger_${name}_${dateRange.from}_to_${dateRange.to}.pdf`;
       await exportHtmlPagesToPdf({ pages, filename });
       toast.success('PDF downloaded');
     } catch (e: any) {
@@ -326,8 +328,7 @@ export function PartyLedgerPage() {
                   setQuickRangeKey(v);
                   const found = quickRanges.find((r) => r.key === v);
                   if (!found) return;
-                  setFrom(String(found.from).slice(0, 10));
-                  setTo(String(found.to).slice(0, 10));
+                  setDateRange({ from: String(found.from).slice(0, 10), to: String(found.to).slice(0, 10) });
                   window.setTimeout(() => {
                     void loadStatement();
                   }, 0);
@@ -386,24 +387,11 @@ export function PartyLedgerPage() {
                 </Select>
               </div>
 
-              <div>
-                <Label>From</Label>
-                <input
-                  type="date"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                />
-              </div>
-
-              <div>
-                <Label>To</Label>
-                <input
-                  type="date"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                />
+              <div className="md:col-span-2 flex items-end">
+                <div className="w-full">
+                  <Label className="mb-1.5 block">Custom Date Range</Label>
+                  <DateRangePicker range={dateRange} onRangeChange={setDateRange} align="start" className="w-full" />
+                </div>
               </div>
             </div>
           </CardContent>
@@ -484,8 +472,8 @@ export function PartyLedgerPage() {
               statement={statement}
               profile={readCurrentProfile()}
               partyLabel={partyLabel}
-              from={from}
-              to={to}
+              from={dateRange.from}
+              to={dateRange.to}
             />
           )}
         </div>

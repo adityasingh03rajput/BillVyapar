@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = 'http://localhost:4000';
+const DEFAULT_API_URL = 'https://billvyapar-backend.fly.dev';
 
 const metaEnv = (import.meta as any)?.env as { [k: string]: any } | undefined;
 const raw = metaEnv?.VITE_API_URL as string | undefined;
@@ -43,3 +43,9 @@ export const getApiUrl = (): string => {
 export const API_URL = getApiUrl();
 
 export const ADMIN_API_URL = API_URL;
+
+/** Returns a server-scoped localStorage cache key to prevent local/prod data bleed */
+export function mkCacheKey(resource: string, profileId: string): string {
+  const serverTag = API_URL.includes('localhost') ? 'local' : 'prod';
+  return `cache:${resource}:${serverTag}:${profileId}`;
+}

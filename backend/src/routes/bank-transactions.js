@@ -31,6 +31,13 @@ bankTransactionsRouter.get('/', enforceFeature('allowBankAccounts'), async (req,
       }
     }
 
+    const { from, to } = req.query || {};
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = String(from);
+      if (to)   filter.date.$lte = String(to);
+    }
+
     const rows = await BankTransaction.find(filter).sort({ date: -1, createdAt: -1 });
 
     res.json(

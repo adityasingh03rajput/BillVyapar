@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PdfTemplateProps } from '../types';
-import { Box, Hr, KeyValue, KeyValueOptional, Label, Money, Muted, safeText, SmallText, TemplateFrame, docTitleFromType, amountInWordsINR, formatInlineAddress, formatStateDisplay } from './TemplateFrame';
+import { Box, Hr, KeyValue, KeyValueOptional, Label, Money, Muted, safeText, SmallText, TemplateFrame, docTitleFromType, amountInWordsINR, displaySubtotal, formatInlineAddress, formatStateDisplay } from './TemplateFrame';
 
 export function ModernTemplate({ doc, profile }: PdfTemplateProps) {
   const taxes = Number(doc.totalCgst || 0) + Number(doc.totalSgst || 0) + Number(doc.totalIgst || 0);
@@ -360,7 +360,7 @@ export function ModernTemplate({ doc, profile }: PdfTemplateProps) {
               <Box>
                 <Label>Summary</Label>
                 <div style={{ marginTop: 10 }}>
-                  <KeyValue label="Subtotal" value={<Money value={Number(doc.subtotal || 0)} />} />
+                  <KeyValue label="Subtotal" value={<Money value={displaySubtotal(doc)} />} />
                   <KeyValue label="Taxes" value={<Money value={taxes} />} />
                   <KeyValue
                     label="Charges"

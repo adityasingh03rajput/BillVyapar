@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
+import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 
 interface Transaction {
   id: string;
@@ -97,8 +98,7 @@ export function VyaparKhataPage() {
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterParty, setFilterParty] = useState<string>('all');
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>(todayISO());
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
 
   const [newTransaction, setNewTransaction] = useState({
     date: todayISO(),
@@ -126,10 +126,14 @@ export function VyaparKhataPage() {
       if (!accessToken || !deviceId || !profileId) return;
       setLoading(true);
       try {
+        const dates = (dateRange.from || dateRange.to) ? `?from=${dateRange.from}&to=${dateRange.to}` : '';
+        const summaryUrl = `${API_URL}/vyapar-khata/summary${dates}`;
+        const transactionsUrl = `${API_URL}/vyapar-khata/transactions${dates}`;
+
         // Load transactions
         const [transactionsRes, summaryRes, partiesRes] = await Promise.all([
-          fetch(`${API_URL}/vyapar-khata/transactions`, { headers }),
-          fetch(`${API_URL}/vyapar-khata/summary`, { headers }),
+          fetch(transactionsUrl, { headers }),
+          fetch(summaryUrl, { headers }),
           fetch(`${API_URL}/vyapar-khata/parties`, { headers }),
         ]);
 
@@ -154,7 +158,7 @@ export function VyaparKhataPage() {
     };
 
     loadData();
-  }, [accessToken, deviceId, profileId]);
+  }, [accessToken, deviceId, profileId, dateRange, headers]);
 
   const handleAddTransaction = async () => {
     if (!accessToken || !deviceId || !profileId) return;
@@ -235,16 +239,16 @@ export function VyaparKhataPage() {
       filtered = filtered.filter(t => t.party === filterParty);
     }
 
-    if (dateFrom) {
-      filtered = filtered.filter(t => t.date >= dateFrom);
+    if (dateRange.from) {
+      filtered = filtered.filter(t => t.date >= dateRange.from);
     }
 
-    if (dateTo) {
-      filtered = filtered.filter(t => t.date <= dateTo);
+    if (dateRange.to) {
+      filtered = filtered.filter(t => t.date <= dateRange.to);
     }
 
     return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions, filterType, filterParty, dateFrom, dateTo]);
+  }, [transactions, filterType, filterParty, dateRange]);
 
   const getTypeColor = (type: string) => {
     const found = transactionTypes.find(t => t.value === type);
@@ -336,21 +340,9 @@ export function VyaparKhataPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>From Date</Label>
-                <Input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>To Date</Label>
-                <Input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
+              <div className="md:col-span-2">
+                <Label className="mb-1.5 block">Date Range</Label>
+                <DateRangePicker range={dateRange} onRangeChange={setDateRange} align="start" className="w-full" />
               </div>
             </div>
           </CardContent>

@@ -72,6 +72,13 @@ export async function idbClearPrefix(prefix: string): Promise<void> {
     return new Promise((resolve) => {
       const tx    = db.transaction(STORE, 'readwrite');
       const store = tx.objectStore(STORE);
+      // Empty prefix = clear everything
+      if (!prefix) {
+        store.clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror    = () => resolve();
+        return;
+      }
       const req   = store.getAllKeys();
       req.onsuccess = () => {
         (req.result as string[])

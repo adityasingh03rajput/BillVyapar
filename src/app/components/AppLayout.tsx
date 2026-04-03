@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState, useCallback } from 'react';
+import { ReactNode, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { Button } from './ui/button';
 import {
@@ -73,6 +73,14 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const sidebarHideTimer = useRef<number | null>(null);
+
+  // Auto-hide sidebar after 2s on mount
+  useEffect(() => {
+    sidebarHideTimer.current = window.setTimeout(() => setSidebarVisible(false), 2000);
+    return () => { if (sidebarHideTimer.current) clearTimeout(sidebarHideTimer.current); };
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -118,29 +126,52 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const [currentProfile, setCurrentProfile] = useState<any>(() => readCurrentProfile());
 
-  // On every mount (app start / page refresh): silently re-fetch the stored profile
-  // from the backend and update localStorage so stale data is never shown.
+  // On every mount: validate the stored profile is still valid, auto-recover if stale
   useEffect(() => {
     const profileId = readCurrentProfile()?.id;
-    if (!profileId || !accessToken || !deviceId) return;
+    if (!accessToken || !deviceId) return;
 
-    fetch(`${API_URL}/profiles/${profileId}`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'X-Device-ID': deviceId,
-        'X-Profile-ID': profileId,
-      },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data && data.id && !data.error) {
-          localStorage.setItem('currentProfile', JSON.stringify(data));
-          setCurrentProfile(data);
-          // Notify same-tab components that the profile has been refreshed
-          window.dispatchEvent(new CustomEvent('profileRefreshed', { detail: data }));
+    const resolveProfile = async () => {
+      if (!profileId) return; // no profile stored — subscription gate handles this
+
+      try {
+        // Fetch all profiles and find the stored one
+        const r = await fetch(`${API_URL}/profiles`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'X-Device-ID': deviceId,
+          },
+        });
+
+        if (!r.ok) return; // network/server error — keep existing local state
+
+        const profiles = await r.json().catch(() => null);
+        if (!Array.isArray(profiles)) return;
+
+        const match = profiles.find((p: any) => p.id === profileId);
+        if (match) {
+          // Profile still valid — refresh local data
+          localStorage.setItem('currentProfile', JSON.stringify(match));
+          setCurrentProfile(match);
+          window.dispatchEvent(new CustomEvent('profileRefreshed', { detail: match }));
+        } else if (profiles.length > 0) {
+          // Stored profile no longer exists — auto-select first available
+          const first = profiles[0];
+          localStorage.setItem('currentProfile', JSON.stringify(first));
+          setCurrentProfile(first);
+          window.dispatchEvent(new CustomEvent('profileRefreshed', { detail: first }));
+        } else {
+          // No profiles at all — redirect to create one
+          localStorage.removeItem('currentProfile');
+          setCurrentProfile({});
+          navigate('/profiles');
         }
-      })
-      .catch(() => { /* ignore — keep localStorage value */ });
+      } catch {
+        // Network error — keep existing local state silently
+      }
+    };
+
+    resolveProfile().catch(() => {});
   }, [accessToken, deviceId]);
 
   const ThemeSwitcher = ({ compact }: { compact?: boolean }) => {
@@ -272,7 +303,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       const profileId = readCurrentProfile()?.id;
       if (!profileId) {
-        navigate('/profiles');
+        // Don't redirect here — the profile resolution effect handles it
+        // Just mark gate as checked so content can render
         setProfileGateChecked(true);
         return;
       }
@@ -565,8 +597,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           }
         }}
       />
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col w-64 bg-sidebar border-r border-sidebar-border">
+      {/* Desktop Sidebar — auto-hides after 2s, shows on hover */}
+      <aside
+        className={`hidden lg:flex lg:flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 overflow-hidden ${sidebarVisible ? 'w-64' : 'w-0 border-r-0'}`}
+        onMouseEnter={() => { setSidebarVisible(true); if (sidebarHideTimer.current) clearTimeout(sidebarHideTimer.current); }}
+        onMouseLeave={() => { sidebarHideTimer.current = window.setTimeout(() => setSidebarVisible(false), 2000); }}
+      >
         <div className="p-6 border-b border-sidebar-border">
           <div className="flex items-center gap-2 mb-4">
             <img src={logoImg} alt="BillVyapar" className="h-12 w-12 rounded-2xl shadow-sm object-contain" />
@@ -654,8 +690,32 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Left-edge indicator — always visible, shows sidebar can be revealed */}
+      <div
+        className="hidden lg:flex fixed left-0 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-1 cursor-pointer"
+        style={{ width: 6 }}
+        onMouseEnter={() => { setSidebarVisible(true); if (sidebarHideTimer.current) clearTimeout(sidebarHideTimer.current); }}
+        title="Show navigation"
+      >
+        {!sidebarVisible && (
+          <>
+            <div style={{ width: 4, height: 32, borderRadius: '0 4px 4px 0', background: 'rgba(99,102,241,0.7)', transition: 'all 0.2s' }} />
+            <div style={{ width: 4, height: 16, borderRadius: '0 4px 4px 0', background: 'rgba(99,102,241,0.4)', transition: 'all 0.2s' }} />
+            <div style={{ width: 4, height: 8, borderRadius: '0 4px 4px 0', background: 'rgba(99,102,241,0.2)', transition: 'all 0.2s' }} />
+          </>
+        )}
+      </div>
+
+      {/* Hover strip — reveals sidebar when it's hidden */}
+      {!sidebarVisible && (
+        <div
+          className="hidden lg:block fixed left-0 top-0 h-full w-2 z-40 cursor-pointer"
+          onMouseEnter={() => { setSidebarVisible(true); if (sidebarHideTimer.current) clearTimeout(sidebarHideTimer.current); }}
+        />
+      )}
+
+      {/* Main Content — always fills remaining width */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Mobile Header */}
         <header className="lg:hidden bg-background border-b border-border p-4 flex items-center justify-between">
           <div className="flex items-center gap-2">

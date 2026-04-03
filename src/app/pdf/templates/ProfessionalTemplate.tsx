@@ -7,6 +7,7 @@ import {
   Money,
   TemplateFrame,
   amountInWordsINR,
+  displaySubtotal,
   docTitleFromType,
   formatInlineAddress,
   formatStateDisplay,
@@ -315,7 +316,7 @@ export function ProfessionalTemplate({ doc, profile }: PdfTemplateProps) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
                   <span style={{ color: colors.muted, fontWeight: 700 }}>Subtotal</span>
                   <span style={{ fontWeight: 900 }}>
-                    <Money value={Number(doc.subtotal || 0)} />
+                    <Money value={displaySubtotal(doc)} />
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>

@@ -16,64 +16,46 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
-import { TraceLoader } from '../components/TraceLoader';
 import { AnalyticsPageSkeleton } from '../components/PageSkeleton';
 import { getCurrentFiscalYearRange } from '../utils/fiscal';
-
-function readAnalyticsCacheSync(key: string): any | null {
-  try {
-    const entry = localStorage.getItem(key);
-    if (!entry) return null;
-    const parsed = JSON.parse(entry);
-    return parsed?.data ?? null;
-  } catch { return null; }
-}
+import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 
 export function AnalyticsPage() {
   const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const profileId = currentProfile?.id;
-  const ANALYTICS_CACHE_KEY = profileId ? `cache:analytics:${profileId}` : '';
-  const ANALYTICS_CACHE_TTL = 5 * 60 * 1000;
+  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
 
-  const _initAnalytics = ANALYTICS_CACHE_KEY ? readAnalyticsCacheSync(ANALYTICS_CACHE_KEY) : null;
-  const [analytics, setAnalytics] = useState<any>(_initAnalytics);
-  const [loading, setLoading] = useState(!_initAnalytics);
-  const { startDate: initialSD, endDate: initialED } = getCurrentFiscalYearRange();
-  const [startDate, setStartDate] = useState(initialSD);
-  const [endDate, setEndDate] = useState(initialED);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
   const [applyingRange, setApplyingRange] = useState(false);
   const { accessToken, deviceId } = useAuth();
 
   const apiUrl = API_URL;
 
-  const writeAnalyticsCache = (data: any, sd: string, ed: string) => {
-    // Only cache the default (no date range) view
-    if (sd || ed || !ANALYTICS_CACHE_KEY) return;
-    try {
-      localStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
-    } catch { /* ignore */ }
-  };
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const newId = (e as CustomEvent)?.detail?.id;
+      if (newId && newId !== profileId) setProfileId(newId);
+    };
+    window.addEventListener('profileRefreshed', handler);
+    return () => window.removeEventListener('profileRefreshed', handler);
+  }, [profileId]);
 
   useEffect(() => {
-    // Serve cache immediately, revalidate in background
-    const cached = ANALYTICS_CACHE_KEY ? readAnalyticsCacheSync(ANALYTICS_CACHE_KEY) : null;
-    if (cached) {
-      setAnalytics(cached);
-      setLoading(false);
-      loadAnalytics(); // background revalidate
-    } else {
-      loadAnalytics();
-    }
+    if (profileId) loadAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [profileId, accessToken]);
 
-  const loadAnalytics = async (opts?: { startDate?: string; endDate?: string }) => {
+  const loadAnalytics = async (range?: DateRange) => {
+    if (!accessToken || !profileId) return;
+    setLoading(true);
     try {
-      const sd = (opts?.startDate ?? startDate).trim();
-      const ed = (opts?.endDate ?? endDate).trim();
+      const r = range || dateRange;
+      const sd = (r.from || '').trim();
+      const ed = (r.to || '').trim();
       const params = new URLSearchParams();
-      if (sd) params.set('startDate', sd);
-      if (ed) params.set('endDate', ed);
+      if (sd) params.set('from', sd);
+      if (ed) params.set('to', ed);
 
       const url = params.toString() ? `${apiUrl}/analytics?${params.toString()}` : `${apiUrl}/analytics`;
       const response = await fetch(url, {
@@ -81,71 +63,35 @@ export function AnalyticsPage() {
           'Authorization': `Bearer ${accessToken}`, 
           'X-Device-ID': deviceId,
           'X-Profile-ID': profileId,
+          'Cache-Control': 'no-cache',
         },
       });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        toast.error(err?.error || `Failed to load analytics (${response.status})`);
+        return;
+      }
       const data = await response.json();
       if (data.error) {
         toast.error(data.error);
       } else {
         setAnalytics(data);
-        writeAnalyticsCache(data, sd, ed);
       }
-    } catch (error) {
-      toast.error('Failed to load analytics');
+    } catch {
+      toast.error('Failed to load analytics — check your connection');
     } finally {
       setLoading(false);
     }
   };
 
-  const applyDateRange = async () => {
-    setApplyingRange(true);
+  const applyDateRange = async (newRange: DateRange) => {
+    setDateRange(newRange);
     setLoading(true);
-    await loadAnalytics({ startDate, endDate });
-    setApplyingRange(false);
+    await loadAnalytics(newRange);
   };
 
-  const pad2 = (n: number) => String(n).padStart(2, '0');
-  const formatDateInput = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  // Removed legacy preset logic, handled by DateRangePicker internally
 
-  const getPresetRange = (preset: 'today' | 'this_week' | 'this_month' | 'last_month') => {
-    const today = new Date();
-    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    if (preset === 'today') {
-      const start = new Date(end);
-      return { startDate: formatDateInput(start), endDate: formatDateInput(end) };
-    }
-
-    if (preset === 'this_week') {
-      // Monday as start of week
-      const day = end.getDay(); // 0..6 (Sun..Sat)
-      const diff = (day + 6) % 7; // days since Monday
-      const start = new Date(end);
-      start.setDate(end.getDate() - diff);
-      return { startDate: formatDateInput(start), endDate: formatDateInput(end) };
-    }
-
-    if (preset === 'this_month') {
-      const start = new Date(end.getFullYear(), end.getMonth(), 1);
-      return { startDate: formatDateInput(start), endDate: formatDateInput(end) };
-    }
-
-    // last_month
-    const start = new Date(end.getFullYear(), end.getMonth() - 1, 1);
-    const lastDayPrevMonth = new Date(end.getFullYear(), end.getMonth(), 0);
-    return { startDate: formatDateInput(start), endDate: formatDateInput(lastDayPrevMonth) };
-  };
-
-  const applyPreset = async (preset: 'today' | 'this_week' | 'this_month' | 'last_month') => {
-    const range = getPresetRange(preset);
-    setStartDate(range.startDate);
-    setEndDate(range.endDate);
-
-    setApplyingRange(true);
-    setLoading(true);
-    await loadAnalytics(range);
-    setApplyingRange(false);
-  };
 
   const downloadItemsCsv = () => {
     const rows: any[] = Array.isArray(analytics?.topItems) ? analytics.topItems : [];
@@ -178,7 +124,7 @@ export function AnalyticsPage() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
-    const rangeSuffix = `${startDate || 'all'}_to_${endDate || 'all'}`;
+    const rangeSuffix = `${dateRange.from || 'all'}_to_${dateRange.to || 'all'}`;
     const filename = `item-wise-sales_${rangeSuffix}.csv`;
 
     const link = document.createElement('a');
@@ -228,79 +174,12 @@ export function AnalyticsPage() {
               <p className="text-muted-foreground mt-1">Business insights and performance metrics</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 w-full sm:w-auto">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">From</div>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">To</div>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                />
-              </div>
-              <div className="flex sm:justify-end">
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={applyDateRange}
-                  className="h-10 px-4 rounded-md bg-primary text-primary-foreground font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Loading...' : 'Apply'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => applyPreset('today')}
-                disabled={applyingRange}
-                className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground hover:bg-muted disabled:opacity-60"
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('this_week')}
-                disabled={applyingRange}
-                className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground hover:bg-muted disabled:opacity-60"
-              >
-                This week
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('this_month')}
-                disabled={applyingRange}
-                className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground hover:bg-muted disabled:opacity-60"
-              >
-                This month
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('last_month')}
-                disabled={applyingRange}
-                className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground hover:bg-muted disabled:opacity-60"
-              >
-                Last month
-              </button>
-            </div>
-
-            <div className="sm:ml-auto">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+              <DateRangePicker range={dateRange} onRangeChange={applyDateRange} />
               <button
                 type="button"
                 onClick={downloadItemsCsv}
-                className="h-9 w-full sm:w-auto rounded-md border border-border bg-background px-3 text-sm text-foreground hover:bg-muted"
+                className="h-9 w-full sm:w-auto px-4 rounded-md border border-border bg-background text-sm text-foreground hover:bg-muted font-medium"
               >
                 Download CSV
               </button>
@@ -472,7 +351,7 @@ export function AnalyticsPage() {
           <CardHeader>
             <CardTitle>Item-wise Sales</CardTitle>
             <CardDescription>
-              Revenue, cost and profit per item{startDate || endDate ? ' (filtered)' : ''}
+              Revenue, cost and profit per item{dateRange.from || dateRange.to ? ' (filtered)' : ''}
             </CardDescription>
           </CardHeader>
           <CardContent>

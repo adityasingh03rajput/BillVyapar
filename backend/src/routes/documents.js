@@ -89,7 +89,7 @@ async function computeDocumentPaidAmount({ userId, profileId, documentId }) {
   return result[0]?.total ?? 0;
 }
 
-async function refreshDocumentPaymentStatus({ userId, profileId, documentId }) {
+async function refreshDocumentPaymentStatus({ userId, profileId, documentId, manualStatus = null }) {
   const [doc, aggResult] = await Promise.all([
     Document.findOne({ _id: documentId, userId, profileId }, 'grandTotal paymentStatus').lean(),
     Payment.aggregate([
@@ -103,10 +103,19 @@ async function refreshDocumentPaymentStatus({ userId, profileId, documentId }) {
   const total = Number(doc.grandTotal || 0);
   const remaining = Math.max(0, total - paidAmount);
 
-  let status = 'unpaid';
-  if (paidAmount > 0 && remaining > 0) status = 'partial';
-  if (remaining <= 0 && total > 0) status = 'paid';
-  if (total <= 0) status = 'paid';
+  let status;
+  if (paidAmount > 0) {
+    // Payment records exist — derive from actual payments
+    if (remaining <= 0 && total > 0) status = 'paid';
+    else status = 'partial';
+  } else if (total <= 0) {
+    status = 'paid';
+  } else if (manualStatus && ['paid', 'partial', 'unpaid'].includes(manualStatus)) {
+    // No payment records — respect manual override from client
+    status = manualStatus;
+  } else {
+    status = 'unpaid';
+  }
 
   await Document.updateOne({ _id: documentId, userId, profileId }, { $set: { paymentStatus: status } });
   return { paymentStatus: status, paidAmount, remaining };
@@ -361,14 +370,24 @@ documentsRouter.get('/', async (req, res, next) => {
     const type   = req.query.type   ? String(req.query.type)   : null;
     const status = req.query.status ? String(req.query.status) : null;
 
+    // Validate date format
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (from && !dateRe.test(from)) return res.status(400).json({ error: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to && !dateRe.test(to)) return res.status(400).json({ error: 'Invalid to date. Use YYYY-MM-DD.' });
+    if (from && to && from > to) return res.status(400).json({ error: 'from date must be before to date.' });
+
     const filter = { userId: req.userId, profileId: req.profileId };
     
-    // Default to current fiscal year if no explicit date range provided
-    const { startDate: fyStart, endDate: fyEnd } = getCurrentFiscalYearRange();
-    const activeFrom = from || fyStart;
-    const activeTo = to || fyEnd;
-    
-    filter.date = { $gte: activeFrom, $lte: activeTo };
+    // Only default to current fiscal year if NO date range parameters are provided
+    if (!from && !to) {
+      // No date filter — return all documents (All Time)
+      // Don't apply fiscal year default here; let the frontend control the range
+    } else {
+      const dFilter = {};
+      if (from) dFilter.$gte = from;
+      if (to)   dFilter.$lte = to;
+      if (Object.keys(dFilter).length > 0) filter.date = dFilter;
+    }
 
     if (type)   filter.type = type;
     if (status === 'paid')   filter.paymentStatus = 'paid';
@@ -443,7 +462,9 @@ documentsRouter.put('/:id', async (req, res, next) => {
     const nextData = req.body || {};
 
     // ── AUDIT FIX #1: Lock financial fields on finalized documents ─────────────
-    if (String(doc.status || '').toLowerCase() === 'final') {
+    // Exception: if the request is explicitly reverting to draft, allow all changes
+    const isRevertingToDraft = String(nextData.status || '').toLowerCase() === 'draft';
+    if (String(doc.status || '').toLowerCase() === 'final' && !isRevertingToDraft) {
       const lockedChanges = FINAL_LOCKED_FIELDS.filter(f => {
         if (!(f in nextData)) return false;
         return JSON.stringify(nextData[f]) !== JSON.stringify(doc.toObject()[f]);
@@ -485,8 +506,15 @@ documentsRouter.put('/:id', async (req, res, next) => {
     // Ensure ledger updates whenever a document status changes
     await upsertLedgerForDocument({ userId: req.userId, profileId: req.profileId, documentId: doc._id });
 
-    // AUDIT FIX R5: Always recompute paymentStatus from actual payment records (not client-sent)
-    await refreshDocumentPaymentStatus({ userId: req.userId, profileId: req.profileId, documentId: doc._id });
+    // Only recompute paymentStatus from payment records if client didn't explicitly send one
+    if (!nextData.paymentStatus) {
+      await refreshDocumentPaymentStatus({
+        userId: req.userId,
+        profileId: req.profileId,
+        documentId: doc._id,
+        manualStatus: null,
+      });
+    }
 
     // Re-fetch to return consistent, server-computed state
     const saved = await Document.findOne({ _id: doc._id, userId: req.userId, profileId: req.profileId }).lean();

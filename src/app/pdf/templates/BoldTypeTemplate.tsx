@@ -5,6 +5,7 @@ import {
   Money,
   TemplateFrame,
   amountInWordsINR,
+  displaySubtotal,
   docTitleFromType,
   formatInlineAddress,
   formatStateDisplay,
@@ -227,8 +228,8 @@ export function BoldTypeTemplate({ doc, profile }: PdfTemplateProps) {
             {/* Right: totals */}
             <div style={{ width: 240 }}>
               {[
-                { label: 'Subtotal:', value: Number(doc.subtotal || 0) },
-                { label: `Tax (${taxes > 0 ? ((taxes / Math.max(Number(doc.subtotal || 1), 1)) * 100).toFixed(0) : 0}%):`, value: taxes, hide: taxes === 0 },
+                { label: 'Subtotal:', value: displaySubtotal(doc) },
+                { label: `Tax (${taxes > 0 ? ((taxes / Math.max(displaySubtotal(doc), 1)) * 100).toFixed(0) : 0}%):`, value: taxes, hide: taxes === 0 },
                 { label: 'CGST:', value: cgst, hide: cgst === 0 },
                 { label: 'SGST:', value: sgst, hide: sgst === 0 },
                 { label: 'IGST:', value: igst, hide: igst === 0 },

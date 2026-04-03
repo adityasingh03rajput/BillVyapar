@@ -8,7 +8,6 @@ import { API_URL } from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
 import { TraceLoader } from '../components/TraceLoader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { idbGet, idbSet } from '../lib/idbCache';
 
 type ExtraExpenseDto = {
   id: string;
@@ -76,30 +75,16 @@ export function ExtraExpensesPage() {
 
   const load = async () => {
     if (!accessToken || !deviceId || !profileId) return;
-    const cacheKey = `apicache:${profileId}:extra-expenses`;
-    
-    // 1. Show cached data immediately to keep UI snappy
-    const cached = await idbGet<{ data: ExtraExpenseDto[]; cachedAt: number }>(cacheKey);
-    if (cached?.data) {
-      setRows(cached.data);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-
-    // 2. Always fetch fresh data from the server in the background
+    setLoading(true);
     try {
       const res = await fetch(`${API_URL}/extra-expenses`, {
         headers: { Authorization: `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
       });
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error((data as any)?.error || 'Failed to load expenses');
-      const arr = Array.isArray(data) ? (data as ExtraExpenseDto[]) : [];
-      setRows(arr);
-      await idbSet(cacheKey, { data: arr, cachedAt: Date.now() });
+      setRows(Array.isArray(data) ? (data as ExtraExpenseDto[]) : []);
     } catch (e: any) {
-      console.error('Fetch error:', e);
-      if (!cached?.data) toast.error(e?.message || 'Failed to load expenses');
+      toast.error(e?.message || 'Failed to load expenses');
     } finally {
       setLoading(false);
     }
@@ -166,7 +151,6 @@ export function ExtraExpensesPage() {
       setAmount('');
       setReference('');
       setNotes('');
-      await idbSet(`apicache:${profileId}:extra-expenses`, { data: [], cachedAt: 0 });
       await load();
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save expense');
@@ -192,7 +176,6 @@ export function ExtraExpensesPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || 'Failed to delete expense');
       toast.success('Expense deleted');
-      await idbSet(`apicache:${profileId}:extra-expenses`, { data: [], cachedAt: 0 });
       await load();
     } catch (e: any) {
       toast.error(e?.message || 'Failed to delete expense');

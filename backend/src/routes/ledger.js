@@ -158,8 +158,11 @@ ledgerRouter.get('/statement', async (req, res, next) => {
     }
 
     const fyDefaults = getCurrentFiscalYearRange();
-    const to = parseDateParam(req.query.to, new Date(fyDefaults.endDate), { endOfDay: true });
-    const from = parseDateParam(req.query.from, new Date(fyDefaults.startDate), { startOfDay: true });
+    // If from/to are not provided or empty, use null (no date filter = all time)
+    const rawFrom = req.query.from ? String(req.query.from).trim() : '';
+    const rawTo = req.query.to ? String(req.query.to).trim() : '';
+    const to = rawTo ? parseDateParam(rawTo, null, { endOfDay: true }) : null;
+    const from = rawFrom ? parseDateParam(rawFrom, null, { startOfDay: true }) : null;
 
     const PartyModel = partyType === 'customer' ? Customer : Supplier;
     const party = await PartyModel.findOne({ _id: partyId, userId: req.userId, profileId: req.profileId }).lean();
@@ -172,7 +175,7 @@ ledgerRouter.get('/statement', async (req, res, next) => {
     const userObjectId = asObjectId(req.userId);
     const profileObjectId = asObjectId(req.profileId);
 
-    const beforeAgg = await LedgerEntry.aggregate([
+    const beforeAgg = from ? await LedgerEntry.aggregate([
       {
         $match: {
           userId: userObjectId,
@@ -189,18 +192,21 @@ ledgerRouter.get('/statement', async (req, res, next) => {
           credit: { $sum: '$credit' },
         },
       },
-    ]);
+    ]) : [];
 
     const before = beforeAgg?.[0] || { debit: 0, credit: 0 };
     const openingSigned = openingSignedBase + (Number(before.debit || 0) - Number(before.credit || 0));
 
     const partyObjectId = new mongoose.Types.ObjectId(partyId);
+    const dateFilter = {};
+    if (from) dateFilter.$gte = from;
+    if (to) dateFilter.$lte = to;
     const entries = await LedgerEntry.find({
       userId: userObjectId,
       profileId: profileObjectId,
       partyType,
       partyId: partyObjectId,
-      date: { $gte: from, $lte: to },
+      ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
     })
       .sort({ date: 1, createdAt: 1 })
       .lean();
@@ -242,7 +248,7 @@ ledgerRouter.get('/statement', async (req, res, next) => {
         logoUrl: party.logoUrl || null,
         logoDataUrl: party.logoDataUrl || null,
       },
-      range: { from: from.toISOString(), to: to.toISOString() },
+      range: { from: from ? from.toISOString() : null, to: to ? to.toISOString() : null },
       openingBalance: balanceFromSigned(openingSigned),
       periodTotals,
       closingBalance: balanceFromSigned(running),

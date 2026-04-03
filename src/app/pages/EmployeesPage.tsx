@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
-import { idbGet, idbSet } from '../lib/idbCache';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -153,58 +152,31 @@ export function EmployeesPage() {
 
   const loadEmployees = async () => {
     if (!profileId) return;
-    const cacheKey = `apicache:${profileId}:employees`;
-
     setEmpLoading(true);
-
-    // Always fetch fresh from server — don't show stale cached employees
-    // (stale cache can have wrong _ids from a previous backend, causing ghost deletes)
     try {
       const res = await fetch(`${API_URL}/employees?profileId=${profileId}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setEmployees(data);
-        await idbSet(cacheKey, { data, cachedAt: Date.now() });
-      }
+      if (Array.isArray(data)) setEmployees(data);
     } catch (error) {
       console.error('Fetch error:', error);
-      // Fall back to cache only if network fails
-      const cached = await idbGet<{ data: Employee[]; cachedAt: number }>(cacheKey);
-      if (cached?.data) {
-        setEmployees(cached.data);
-      } else {
-        toast.error('Failed to load employees');
-      }
+      toast.error('Failed to load employees');
     } finally {
       setEmpLoading(false);
     }
   };
 
   const loadRoles = async () => {
-    const cacheKey = `apicache:roles`;
-    const TTL = 10 * 60 * 1000;
-    const cached = await idbGet<{ data: CustomRole[]; cachedAt: number }>(cacheKey);
-    if (cached?.data) { setCustomRoles(cached.data); setRolesLoading(false); }
-    else setRolesLoading(true);
-    if (cached && Date.now() - cached.cachedAt < TTL) return;
+    setRolesLoading(true);
     try {
       const res = await fetch(`${API_URL}/roles`, { headers });
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setCustomRoles(data);
-        await idbSet(cacheKey, { data, cachedAt: Date.now() });
-      }
+      if (Array.isArray(data)) setCustomRoles(data);
     } catch { toast.error('Failed to load roles'); }
     finally { setRolesLoading(false); }
   };
 
   useEffect(() => {
-    // Bust any stale cache from previous backend deployments
-    if (profileId) {
-      idbSet(`apicache:${profileId}:employees`, { data: [], cachedAt: 0 }).catch(() => {});
-    }
-    idbSet('apicache:roles', { data: [], cachedAt: 0 }).catch(() => {});
     loadEmployees();
     loadRoles();
   }, [profileId]);
@@ -281,7 +253,6 @@ export function EmployeesPage() {
         toast.success('Employee added');
       }
       setEmpDialogOpen(false);
-      await idbSet(`apicache:${profileId}:employees`, { data: [], cachedAt: 0 }); // bust cache
       loadEmployees();
     } catch (err: any) { toast.error(err.message || 'Failed to save'); }
     finally { setEmpSaving(false); }
@@ -305,7 +276,6 @@ export function EmployeesPage() {
       if (data.error) throw new Error(data.error);
       toast.success('Employee removed');
       setDeleteEmp(null);
-      await idbSet(`apicache:${profileId}:employees`, { data: [], cachedAt: 0 });
       loadEmployees();
     } catch (err: any) { toast.error(err.message || 'Failed to delete'); }
   };

@@ -7,6 +7,7 @@ import {
   Money,
   TemplateFrame,
   amountInWordsINR,
+  displaySubtotal,
   docTitleFromType,
   formatInlineAddress,
   formatStateDisplay,
@@ -219,7 +220,7 @@ export function ElegantTemplate({ doc, profile }: PdfTemplateProps) {
           <div style={{ flex: 1 }}>
             <div style={{ padding: '14px 16px', background: '#FFFFFF', borderRadius: 6, border: `1px solid ${border}` }}>
               <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.5, color: greenMid, marginBottom: 10 }}>Summary</div>
-              <KeyValue label="Subtotal" value={<Money value={Number(doc.subtotal || 0)} />} />
+              <KeyValue label="Subtotal" value={<Money value={displaySubtotal(doc)} />} />
               {cgst > 0 && <KeyValue label="CGST" value={<Money value={cgst} />} />}
               {sgst > 0 && <KeyValue label="SGST" value={<Money value={sgst} />} />}
               {igst > 0 && <KeyValue label="IGST" value={<Money value={igst} />} />}

@@ -21,14 +21,26 @@ analyticsRouter.use(
 
 analyticsRouter.get('/', async (req, res, next) => {
   try {
-    const fyDefaults = getCurrentFiscalYearRange();
-    const { 
-      startDate: startDateRaw = fyDefaults.startDate, 
-      endDate: endDateRaw = fyDefaults.endDate 
-    } = req.query || {};
+    const { startDate: qSd, endDate: qEd, from, to } = req.query || {};
+    let startDate = null;
+    let endDate = null;
 
-    const startDate = typeof startDateRaw === 'string' && startDateRaw.trim() ? startDateRaw.trim() : null;
-    const endDate   = typeof endDateRaw   === 'string' && endDateRaw.trim()   ? endDateRaw.trim()   : null;
+    // Validate date format
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const rawFrom = (from || qSd || '').trim();
+    const rawTo = (to || qEd || '').trim();
+    if (rawFrom && !dateRe.test(rawFrom)) return res.status(400).json({ error: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (rawTo && !dateRe.test(rawTo)) return res.status(400).json({ error: 'Invalid to date. Use YYYY-MM-DD.' });
+    if (rawFrom && rawTo && rawFrom > rawTo) return res.status(400).json({ error: 'from date must be before to date.' });
+
+    if (!rawFrom && !rawTo) {
+      // No date filter — return all time analytics
+      startDate = null;
+      endDate = null;
+    } else {
+      startDate = rawFrom || null;
+      endDate = rawTo || null;
+    }
 
     const userId    = new mongoose.Types.ObjectId(req.userId);
     const profileId = new mongoose.Types.ObjectId(req.profileId);
@@ -82,7 +94,8 @@ analyticsRouter.get('/', async (req, res, next) => {
 
       // 3. Monthly revenue
       Document.aggregate([
-        { $match: { ...baseMatch, type: 'invoice', date: { $exists: true, $ne: null } } },
+        { $match: { ...baseMatch, type: 'invoice' } },
+        { $match: { date: { $exists: true, $ne: null } } },
         {
           $group: {
             _id: { $substr: ['$date', 0, 7] }, // "YYYY-MM"

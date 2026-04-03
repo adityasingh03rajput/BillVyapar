@@ -83,43 +83,50 @@ function LayoutRoute() {
 }
 
 const createRouter = window.location.protocol === 'file:' ? createHashRouter : createBrowserRouter;
-const router = createRouter([
-  { path: "/", element: <AuthPage /> },
-  { path: "/employee/login",      element: <EmployeeLoginPage /> },
-  { path: "/employee/attendance", element: <EmployeeAttendancePage /> },
-  {
-    element: <LayoutRoute />,
-    children: [
-      { path: "/profiles",            element: wrap(ProfilesPageWrapper) },
-      { path: "/welcome",             element: wrap(WelcomePageWrapper) },
-      { path: "/dashboard",           element: wrap(DashboardPageWrapper) },
-      { path: "/documents",           element: wrap(DocumentsPageWrapper) },
-      { path: "/documents/create",    element: wrap(CreateDocumentPageWrapper) },
-      { path: "/documents/edit/:id",  element: wrap(CreateDocumentPageWrapper) },
-      { path: "/customers",           element: wrap(CustomersPageWrapper) },
-      { path: "/suppliers",           element: wrap(SuppliersPageWrapper) },
-      { path: "/items",               element: wrap(ItemsPageWrapper) },
-      { path: "/analytics",           element: wrap(AnalyticsPageWrapper) },
-      { path: "/reports/gst",         element: wrap(GstReportsPage) },
-      { path: "/ledger",              element: wrap(PartyLedgerPageWrapper) },
-      { path: "/subscription",        element: wrap(SubscriptionPageWrapper) },
-      { path: "/bank-accounts",       element: wrap(BankAccountsPageWrapper) },
-      { path: "/pos",                 element: wrap(PosPageWrapper) },
-      { path: "/extra-expenses",      element: wrap(ExtraExpensesPageWrapper) },
-      { path: "/vyapar-khata",        element: wrap(VyaparKhataPageWrapper) },
-      { path: "/vyapar-khata-new",    element: wrap(VyaparKhataPageNewWrapper) },
-      { path: "/employees",           element: wrap(EmployeesPageWrapper) },
-      { path: "/attendance",          element: wrap(AttendancePageWrapper) },
-    ],
-  },
-]);
+
+function buildRouter() {
+  return createRouter([
+    { path: "/", element: <AuthPage /> },
+    { path: "/employee/login",      element: <EmployeeLoginPage /> },
+    { path: "/employee/attendance", element: <EmployeeAttendancePage /> },
+    {
+      element: <LayoutRoute />,
+      children: [
+        { path: "/profiles",            element: wrap(ProfilesPageWrapper) },
+        { path: "/welcome",             element: wrap(WelcomePageWrapper) },
+        { path: "/dashboard",           element: wrap(DashboardPageWrapper) },
+        { path: "/documents",           element: wrap(DocumentsPageWrapper) },
+        { path: "/documents/create",    element: wrap(CreateDocumentPageWrapper) },
+        { path: "/documents/edit/:id",  element: wrap(CreateDocumentPageWrapper) },
+        { path: "/customers",           element: wrap(CustomersPageWrapper) },
+        { path: "/suppliers",           element: wrap(SuppliersPageWrapper) },
+        { path: "/items",               element: wrap(ItemsPageWrapper) },
+        { path: "/analytics",           element: wrap(AnalyticsPageWrapper) },
+        { path: "/reports/gst",         element: wrap(GstReportsPage) },
+        { path: "/ledger",              element: wrap(PartyLedgerPageWrapper) },
+        { path: "/subscription",        element: wrap(SubscriptionPageWrapper) },
+        { path: "/bank-accounts",       element: wrap(BankAccountsPageWrapper) },
+        { path: "/pos",                 element: wrap(PosPageWrapper) },
+        { path: "/extra-expenses",      element: wrap(ExtraExpensesPageWrapper) },
+        { path: "/vyapar-khata",        element: wrap(VyaparKhataPageWrapper) },
+        { path: "/vyapar-khata-new",    element: wrap(VyaparKhataPageNewWrapper) },
+        { path: "/employees",           element: wrap(EmployeesPageWrapper) },
+        { path: "/attendance",          element: wrap(AttendancePageWrapper) },
+      ],
+    },
+  ]);
+}
+
+// Singleton router — created once inside the provider tree via AppInner
+let _router: ReturnType<typeof buildRouter> | null = null;
 
 function AppInner() {
   const isNative = useIsNative();
+  if (!_router) _router = buildRouter();
   return (
     <>
       {!isNative && <OfflineBanner />}
-      <RouterProvider router={router} />
+      <RouterProvider router={_router} />
       <Toaster />
     </>
   );

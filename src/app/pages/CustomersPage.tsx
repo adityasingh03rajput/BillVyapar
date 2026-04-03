@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Plus, Search, User, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { API_URL } from '../config/api';
+import { API_URL, mkCacheKey } from '../config/api';
 import { INDIAN_STATES } from '../utils/indianStates';
 import {
   hasContactErrors,
@@ -45,22 +45,12 @@ interface Customer {
 }
 
 function readCustomersCacheSync(): Customer[] {
-  try {
-    const raw = localStorage.getItem('currentProfile');
-    if (!raw) return [];
-    const p = JSON.parse(raw);
-    const profileId = (typeof p === 'string' ? JSON.parse(p) : p)?.id;
-    if (!profileId) return [];
-    const entry = localStorage.getItem(`cache:customers:${profileId}`);
-    if (!entry) return [];
-    const parsed = JSON.parse(entry);
-    return Array.isArray(parsed?.data) ? parsed.data : [];
-  } catch { return []; }
+  return [];
 }
 
 export function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>(() => readCustomersCacheSync());
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>(() => readCustomersCacheSync());
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [formData, setFormData] = useState<Partial<Customer>>({});
@@ -69,7 +59,7 @@ export function CustomersPage() {
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<Customer>>({});
   const [editFormErrors, setEditFormErrors] = useState<{ gstin?: string; phone?: string; email?: string }>({});
-  const [loading, setLoading] = useState(() => readCustomersCacheSync().length === 0);
+  const [loading, setLoading] = useState(true);
   const [gstinLoading, setGstinLoading] = useState(false);
   const [gstinLookupLoading, setGstinLookupLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -85,34 +75,17 @@ export function CustomersPage() {
 
   const apiUrl = API_URL;
   const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
-  const profileId = currentProfile?.id;
+  const [profileId, setProfileId] = useState<string>(() => currentProfile?.id ?? '');
 
-  const customersCacheKey = profileId ? `cache:customers:${profileId}` : null;
-  const CUSTOMERS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — survives app restarts on Android
-
-  const readCustomersCache = () => {
-    if (!customersCacheKey) return null;
-    try {
-      const raw = localStorage.getItem(customersCacheKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      const ts = Number(parsed?.ts || 0);
-      const data = Array.isArray(parsed?.data) ? parsed.data : null;
-      if (!data || !ts) return null;
-      return { ts, data } as { ts: number; data: Customer[] };
-    } catch {
-      return null;
-    }
-  };
-
-  const writeCustomersCache = (data: Customer[]) => {
-    if (!customersCacheKey) return;
-    try {
-      localStorage.setItem(customersCacheKey, JSON.stringify({ ts: Date.now(), data }));
-    } catch {
-      // ignore
-    }
-  };
+  // Re-fetch when AppLayout resolves a stale/new profile
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const newId = (e as CustomEvent)?.detail?.id;
+      if (newId && newId !== profileId) setProfileId(newId);
+    };
+    window.addEventListener('profileRefreshed', handler);
+    return () => window.removeEventListener('profileRefreshed', handler);
+  }, [profileId]);
 
   const handleGstinLookupAutofill = async (target: 'create' | 'edit') => {
     if (!accessToken || !deviceId || !profileId) return;
@@ -180,14 +153,7 @@ export function CustomersPage() {
     }
   };
 
-  const clearCustomersCache = () => {
-    if (!customersCacheKey) return;
-    try {
-      localStorage.removeItem(customersCacheKey);
-    } catch {
-      // ignore
-    }
-  };
+  const clearCustomersCache = () => {};
 
   const fileToDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -252,17 +218,7 @@ export function CustomersPage() {
 
   const loadCustomers = async ({ force = false }: { force?: boolean } = {}) => {
     if (!accessToken || !deviceId || !profileId) return;
-
-    const cached = force ? null : readCustomersCache();
-    const isFresh = cached ? Date.now() - cached.ts < CUSTOMERS_CACHE_TTL_MS : false;
-
-    if (cached?.data?.length) {
-      setCustomers(cached.data);
-      setLoading(false);
-      if (isFresh && !force) return; // fresh — skip network
-    } else {
-      setLoading(true);
-    }
+    setLoading(true);
 
     try {
       const response = await fetch(`${apiUrl}/customers`, {
@@ -271,7 +227,6 @@ export function CustomersPage() {
       const data = await response.json();
       if (!data.error) {
         setCustomers(data);
-        if (Array.isArray(data)) writeCustomersCache(data);
       }
     } catch (error) {
       if (!customers.length) toast.error('Failed to load customers');
