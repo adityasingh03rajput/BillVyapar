@@ -6,7 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, Search, Building2, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, Search, Building2, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight, Trash2, Info, BookOpen, BarChart, FileSpreadsheet, Clock, Landmark } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL, mkCacheKey } from '../config/api';
 import { usePageRefresh } from '../hooks/usePageRefresh';
@@ -23,6 +23,14 @@ import { TraceLoader } from '../components/TraceLoader';
 import { CustomersPageSkeleton } from '../components/PageSkeleton';
 import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '../components/ui/dropdown-menu';
 
 interface Supplier {
   id: string;
@@ -52,6 +60,7 @@ export function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [formData, setFormData] = useState<Partial<Supplier>>({});
   const [formErrors, setFormErrors] = useState<{ gstin?: string; phone?: string; email?: string }>({});
@@ -60,6 +69,7 @@ export function SuppliersPage() {
   const [editFormData, setEditFormData] = useState<Partial<Supplier>>({});
   const [editFormErrors, setEditFormErrors] = useState<{ gstin?: string; phone?: string; email?: string }>({});
   const [loading, setLoading] = useState(true);
+  const [supplierBalances, setSupplierBalances] = useState<Record<string, number>>({});
   const [gstinLoading, setGstinLoading] = useState(false);
   const [gstinLookupLoading, setGstinLookupLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -202,18 +212,22 @@ export function SuppliersPage() {
   }, []);
 
   useEffect(() => {
+    let filtered = [...suppliers];
+    
     if (searchTerm) {
-      setFilteredSuppliers(
-        suppliers.filter(s =>
-          s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          s.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          s.phone?.includes(searchTerm)
-        )
+      filtered = filtered.filter(s =>
+        s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.phone?.includes(searchTerm)
       );
-    } else {
-      setFilteredSuppliers(suppliers);
     }
-  }, [searchTerm, suppliers]);
+
+    if (filterStatus === 'unpaid') {
+      filtered = filtered.filter(s => (supplierBalances[s.id] || 0) > 0);
+    }
+
+    setFilteredSuppliers(filtered);
+  }, [searchTerm, suppliers, filterStatus, supplierBalances]);
 
   const loadSuppliers = async ({ force = false }: { force?: boolean } = {}) => {
     if (!accessToken || !deviceId || !profileId) return;
@@ -226,12 +240,43 @@ export function SuppliersPage() {
       const data = await response.json();
       if (!data.error) {
         setSuppliers(data);
+        // Load balances after suppliers to show individual payable
+        loadOutstandingBalances();
       }
     } catch {
       if (!suppliers.length) toast.error('Failed to load suppliers');
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadOutstandingBalances = async () => {
+    if (!accessToken || !profileId) return;
+    try {
+      const res = await fetch(`${apiUrl}/payments/outstanding?partyType=supplier`, {
+        headers: { Authorization: `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+
+      const balances: Record<string, number> = {};
+      (data.documents || []).forEach((d: any) => {
+        const sid = d.party?.id;
+        if (sid) {
+          balances[sid] = (balances[sid] || 0) + Number(d.remaining || 0);
+        }
+      });
+      setSupplierBalances(balances);
+    } catch {
+      // silent fail for balances
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+    }).format(amount);
   };
 
   const handleEditClick = (supplier: Supplier) => {
@@ -671,26 +716,86 @@ export function SuppliersPage() {
                       </div>
                     </div>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEditClick(supplier)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Supplier Insight"
+                          >
+                            <Info className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64">
+                          <DropdownMenuLabel className="flex items-center justify-between">
+                            <span>Supplier Insight</span>
+                            <span className="text-[10px] font-normal px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">v1.0.4</span>
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          
+                          <DropdownMenuItem 
+                            className="cursor-pointer"
+                            onClick={() => navigate(`/ledger?partyId=${supplier.id}&partyType=supplier`)}
+                          >
+                            <BookOpen className="h-4 w-4 mr-2 text-indigo-500" />
+                            <span>Register Ledger</span>
+                          </DropdownMenuItem>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openDeleteDialog(supplier)}
-                      className="text-muted-foreground hover:text-destructive"
-                      aria-label="Delete supplier"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                          <DropdownMenuItem 
+                            className="cursor-pointer"
+                            onClick={() => {
+                              setSearchTerm(supplier.name);
+                              setFilterStatus('unpaid');
+                            }}
+                          >
+                            <Clock className="h-4 w-4 mr-2 text-orange-500" />
+                            <span>Payable Analysis</span>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem 
+                            className="cursor-pointer"
+                            onClick={() => navigate('/bank-accounts')}
+                          >
+                            <Landmark className="h-4 w-4 mr-2 text-blue-500" />
+                            <span>Manage Bank Accounts</span>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator />
+                          <div className="p-2 bg-muted/30 rounded-md m-1">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Quick Stats</p>
+                            <div className="flex justify-between items-center text-xs">
+                              <span>Payable:</span>
+                              <span className={Number(supplierBalances[supplier.id] || 0) > 0 ? 'text-red-600 font-bold' : 'text-green-600'}>
+                                {formatCurrency(supplierBalances[supplier.id] || 0)}
+                              </span>
+                            </div>
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditClick(supplier)}
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openDeleteDialog(supplier)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        aria-label="Delete supplier"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
@@ -710,6 +815,12 @@ export function SuppliersPage() {
                     <div className="flex items-start gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-4 w-4 mt-0.5" />
                       <span className="line-clamp-2">{supplier.address}</span>
+                    </div>
+                  )}
+                  {supplierBalances[supplier.id] > 0 && (
+                    <div className="pt-2 mt-2 border-t flex justify-between items-center">
+                      <span className="text-xs font-semibold text-red-600 uppercase tracking-wider">Payable</span>
+                      <span className="text-sm font-bold text-red-600">{formatCurrency(supplierBalances[supplier.id])}</span>
                     </div>
                   )}
                 </CardContent>

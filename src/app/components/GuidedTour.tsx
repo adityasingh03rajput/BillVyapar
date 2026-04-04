@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Button } from './ui/button';
+import { useTour } from '../contexts/TourContext';
+import { ShieldCheck, Info } from 'lucide-react';
 
 type TourStep = {
   route?: string;
@@ -26,6 +28,7 @@ export function GuidedTour({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentStepIndex, setStepIndex, isDemoMode, endTour } = useTour();
 
   const isMobile = typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)').matches : false;
 
@@ -33,162 +36,112 @@ export function GuidedTour({
     () => [
       {
         route: '/dashboard',
-        selector: '[data-tour-id="mobile-menu-trigger"]',
-        title: 'Menu',
-        description: 'Tap here to open the menu on mobile.',
-      },
-      {
-        route: '/dashboard',
         selector: '[data-tour-id="nav-dashboard"]',
-        title: 'Dashboard',
-        description: 'Quick view of totals, recent documents, and top items.',
-        ctaLabel: 'Open',
-        ctaPath: '/dashboard',
+        title: 'Welcome to BillVyapar v1.0.4',
+        description: 'Experience your business command center. We have enabled Demo Mode: explore safely with dummy data while your real records remain untouched.',
       },
       {
         route: '/dashboard',
+        selector: '[data-tour-id="dashboard-tools-trigger"]',
+        title: 'New: Dashboard Tools',
+        description: 'Tucked inside this menu are your Theme settings, Fullscreen mode, and this very Walkthrough. Personalize your workspace in seconds.',
+      },
+      {
+        route: '/documents/create',
         selector: '[data-tour-id="cta-create-document"]',
-        title: 'Create Document',
-        description: 'Start here to create invoices/quotations/orders/challans and purchase invoices.',
-        ctaLabel: 'Open',
+        title: 'Step 1: Professional Invoicing',
+        description: 'Billing is now a breeze. In Demo Mode, we pre-fill data automatically so you can see the beauty of our GST-ready templates.',
+        ctaLabel: 'Try Billing',
         ctaPath: '/documents/create',
       },
       {
-        route: '/dashboard',
-        selector: '[data-tour-id="cta-add-customer"]',
-        title: 'Add Customer',
-        description: 'Save customers once, reuse in documents instantly.',
-        ctaLabel: 'Open',
-        ctaPath: '/customers',
-      },
-      {
-        route: '/dashboard',
-        selector: '[data-tour-id="cta-add-item"]',
-        title: 'Add Item',
-        description: 'Create items/services with taxes, unit, rates and HSN/SAC.',
-        ctaLabel: 'Open',
-        ctaPath: '/items',
-      },
-      {
-        route: '/documents',
-        selector: '[data-tour-id="nav-documents"]',
-        title: 'Documents',
-        description: 'Create, edit, duplicate, convert, download PDFs and manage payments.',
-        ctaLabel: 'Open',
-        ctaPath: '/documents',
-      },
-      {
-        route: '/documents',
-        selector: '[data-tour-id="cta-documents-create"]',
-        title: 'Create Document Button',
-        description: 'Use this to create a new document anytime.',
-        ctaLabel: 'Create',
-        ctaPath: '/documents/create',
+        route: '/documents/create',
+        selector: '.item-table-header',
+        title: 'Smart Line Items',
+        description: 'Add products with intelligent HSN matching, SGST/CGST/IGST calculations, and item-wise discounts automatically computed.',
       },
       {
         route: '/customers',
         selector: '[data-tour-id="nav-parties"]',
-        title: 'Parties',
-        description: 'Manage customers and suppliers. Reuse them in documents.',
-        ctaLabel: 'Open',
+        title: 'Step 2: Unified Party Center',
+        description: 'Manage both Customers and Suppliers. Switch tabs to see your entire supply chain and debt status in one view.',
+        ctaLabel: 'Manage Parties',
         ctaPath: '/customers',
       },
       {
         route: '/customers',
+        selector: '[data-tour-id="party-info-btn"]',
+        title: 'New: Party Insight',
+        description: 'Click the "i" icon on any card to access the Ledger, Outstanding analysis, and specific GST reports for that party instantly.',
+      },
+      {
+        route: '/customers',
         selector: '[data-tour-id="cta-add-customer"]',
-        title: 'Add Customer',
-        description: 'Add customers from here. You can switch to suppliers too.',
+        title: 'Lightning GST Lookup',
+        description: 'Simply paste a GSTIN and watch us fetch the Business Name, Address, and PAN details from the official registry.',
       },
       {
-        route: '/suppliers',
-        selector: '[data-tour-id="cta-add-supplier"]',
-        title: 'Add Supplier',
-        description: 'Add suppliers with bank and UPI details for purchase invoices.',
+        route: '/ledger',
+        selector: '[data-tour-id="nav-ledger"]',
+        title: 'Step 3: Automated Ledger',
+        description: 'Real-time reconciliation. Every invoice and payment is automatically posted here. Export to PDF/Excel for your CA with one click.',
+        ctaLabel: 'Audit Ledger',
+        ctaPath: '/ledger',
       },
       {
-        route: '/items',
-        selector: '[data-tour-id="nav-items"]',
-        title: 'Items',
-        description: 'Create item/service list with taxes, unit, rates and HSN/SAC.',
-        ctaLabel: 'Open',
-        ctaPath: '/items',
-      },
-      {
-        route: '/items',
-        selector: '[data-tour-id="cta-add-item"]',
-        title: 'Add Item',
-        description: 'Add items/services that will appear in documents.',
-      },
-      {
-        route: '/analytics',
-        selector: '[data-tour-id="nav-analytics"]',
-        title: 'Analytics',
-        description: 'Track sales, invoices and business performance.',
-        ctaLabel: 'Open',
-        ctaPath: '/analytics',
+        route: '/dashboard',
+        selector: '[data-tour-id="dashboard-outstanding-card"]',
+        title: 'Step 4: Smart Outstanding',
+        description: 'Never lose track of payments. Outstanding is calculated as (Total Sales - Received Amount). Click here to deep-dive into unpaid bills.',
+        ctaLabel: 'Track Debts',
+        ctaPath: '/dashboard',
       },
       {
         route: '/reports/gst',
         selector: '[data-tour-id="nav-gst"]',
-        title: 'GST Reports',
-        description: 'Generate and review GST reports.',
-        ctaLabel: 'Open',
+        title: 'Step 5: Tax Compliance',
+        description: 'Generate GSTR-1 and GSTR-3B audit-ready summaries. We handle the complex math so you stay worry-free.',
+        ctaLabel: 'View Tax Reports',
         ctaPath: '/reports/gst',
       },
       {
-        route: '/subscription',
-        selector: '[data-tour-id="nav-subscription"]',
-        title: 'Subscription',
-        description: 'Manage plan, renewals and access validity.',
-        ctaLabel: 'Open',
-        ctaPath: '/subscription',
+        route: '/analytics',
+        selector: '[data-tour-id="nav-analytics"]',
+        title: 'Step 6: Business Intelligence',
+        description: 'Growth at a glance. Performance charts, Top Customers, and Expense tracking to help you make data-driven decisions.',
+        ctaLabel: 'Explore Data',
+        ctaPath: '/analytics',
       },
       {
-        route: '/documents/create',
-        selector: '[data-tour-id="cta-save-document"]',
-        title: 'Save Document',
-        description: 'Save the document once you fill all details.',
+        route: '/bank-accounts',
+        selector: '[data-tour-id="nav-bank-accounts"]',
+        title: 'Step 7: UPI & QR Payments',
+        description: 'Setup your bank and UPI IDs once. We automatically print dynamic QR codes on your invoices for instant collections.',
+        ctaLabel: 'Setup Payments',
+        ctaPath: '/bank-accounts',
       },
       {
-        route: '/documents',
-        selector: '[data-tour-id="doc-action-menu"]',
-        title: 'Document Actions',
-        description: 'Open actions like payment and PDF download for a document.',
-      },
-      {
-        route: '/documents',
-        selector: '[data-tour-id="doc-action-download-pdf"]',
-        title: 'Download PDF',
-        description: 'Download PDF using templates and share with your customer.',
-      },
-      {
-        route: '/documents',
-        selector: '[data-tour-id="doc-action-add-payment"]',
-        title: 'Add Payment',
-        description: 'Record payment and update the payment status.',
-      },
-      {
-        route: '/profiles',
-        selector: '[data-tour-id="nav-profiles"]',
-        title: 'Profiles',
-        description: 'Switch or edit business profiles and saved bank/UPI details.',
-        ctaLabel: 'Open',
-        ctaPath: '/profiles',
+        route: '/dashboard',
+        selector: '.p-2:contains("v1.0.4")',
+        title: 'You are all set!',
+        description: 'The v1.0.4 Premium Edition is ready for your business. Restart this tour anytime from the tool menu.',
       },
     ],
     [],
   );
 
-  const [stepIndex, setStepIndex] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const [targetExists, setTargetExists] = useState(true);
 
   const total = steps.length;
-  const step = steps[Math.min(stepIndex, total - 1)];
-  const isFirst = stepIndex === 0;
-  const isLast = stepIndex === total - 1;
+  const step = steps[Math.min(currentStepIndex, total - 1)];
+  const isFirst = currentStepIndex === 0;
+  const isLast = currentStepIndex === total - 1;
 
-  const close = () => onOpenChange(false);
+  const close = () => {
+    endTour();
+    onOpenChange(false);
+  };
 
   const measure = () => {
     if (!open) return;
@@ -226,7 +179,7 @@ export function GuidedTour({
     if (!open) return;
     measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, stepIndex, location.pathname]);
+  }, [open, currentStepIndex, location.pathname]);
 
   useEffect(() => {
     if (!open) return;
@@ -241,7 +194,7 @@ export function GuidedTour({
       window.removeEventListener('scroll', onScroll, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, stepIndex]);
+  }, [open, currentStepIndex]);
 
   useEffect(() => {
     if (open) return;
@@ -284,54 +237,63 @@ export function GuidedTour({
         }
         style={isMobile ? undefined : { left: tooltipLeft, top: tooltipTop, maxWidth: tooltipMaxWidth }}
       >
-        <div className={isMobile ? 'text-[11px] text-slate-500' : 'text-xs text-slate-500'}>
-          Step {stepIndex + 1} / {total}
+        <div className={isMobile ? 'text-[11px] text-slate-500' : 'text-xs text-slate-500 flex items-center justify-between'}>
+          <span>Step {currentStepIndex + 1} / {total}</span>
+          {isDemoMode && (
+             <span className="flex items-center gap-1 text-red-600 font-bold uppercase tracking-wider bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+               <ShieldCheck className="h-3 w-3" />
+               Demo Mode
+             </span>
+          )}
         </div>
-        <div className={isMobile ? 'mt-1 text-[15px] font-semibold text-slate-900' : 'mt-1 text-base font-semibold text-slate-900'}>
+        <div className={isMobile ? 'mt-1 text-[15px] font-semibold text-slate-900' : 'mt-1 text-lg font-bold text-slate-900 flex items-center gap-2'}>
+          <Info className="h-5 w-5 text-blue-500" />
           {step.title}
         </div>
-        <div className={isMobile ? 'mt-1 text-[13px] leading-5 text-slate-600' : 'mt-1 text-sm text-slate-600'}>
+        <div className={isMobile ? 'mt-1 text-[13px] leading-5 text-slate-600' : 'mt-2 text-[15px] leading-relaxed text-slate-700'}>
           {step.description}
         </div>
 
         {!targetExists && (
-          <div className="mt-2 text-xs text-amber-700">Target not visible on this screen. Use Next.</div>
+          <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+            <Info className="h-3.5 w-3.5" />
+            Target element hidden. Navigating to page...
+          </div>
         )}
 
-        <div className={isMobile ? 'mt-4 flex flex-col gap-2' : 'mt-4 flex items-center justify-between gap-2'}>
+        <div className={isMobile ? 'mt-4 flex flex-col gap-2' : 'mt-5 flex items-center justify-between gap-2'}>
           <Button
             type="button"
-            variant="outline"
-            onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
+            variant="ghost"
+            onClick={() => setStepIndex(Math.max(0, currentStepIndex - 1))}
             disabled={isFirst}
-            className={isMobile ? 'h-10 w-full' : undefined}
+            className={isMobile ? 'h-10 w-full' : 'text-slate-500'}
           >
             Back
           </Button>
 
-          <div className={isMobile ? 'flex w-full flex-col gap-2' : 'flex gap-2'}>
+          <div className={isMobile ? 'flex w-full flex-col gap-2' : 'flex gap-3'}>
             {step.ctaPath && (
               <Button
                 type="button"
                 variant="outline"
+                className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                 onClick={() => {
-                  close();
                   navigate(step.ctaPath!);
                 }}
-                className={isMobile ? 'h-10 w-full' : undefined}
               >
-                {step.ctaLabel || 'Open'}
+                {step.ctaLabel || 'Action'}
               </Button>
             )}
             <Button
               type="button"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200"
               onClick={() => {
                 if (isLast) close();
-                else setStepIndex((i) => Math.min(total - 1, i + 1));
+                else setStepIndex(Math.min(total - 1, currentStepIndex + 1));
               }}
-              className={isMobile ? 'h-10 w-full' : undefined}
             >
-              {isLast ? 'Finish' : 'Next'}
+              {isLast ? 'Finish' : 'Next Step'}
             </Button>
           </div>
         </div>

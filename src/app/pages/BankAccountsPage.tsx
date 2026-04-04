@@ -11,6 +11,7 @@ import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
+import { FeatureInfo } from '../components/FeatureInfo';
 
 function formatInr(amount: number) {
   const val = Number(amount || 0);
@@ -306,7 +307,18 @@ export function BankAccountsPage() {
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xl font-semibold">Bank Accounts</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xl font-semibold">Bank Accounts</div>
+              <FeatureInfo 
+                title="Bank Account Management"
+                steps={[
+                  "Add your Bank Name, Branch, and IFSC for professional invoices.",
+                  "Enter your UPI ID to auto-generate QR codes on digital bills.",
+                  "Transactions are automatically synced from linked Payment records.",
+                  "Use 'Manual Credit' to record opening balances or non-invoice deposits."
+                ]}
+              />
+            </div>
             <div className="text-sm text-muted-foreground">{String(currentProfile?.businessName || '').trim() || 'Select a business profile'}</div>
           </div>
           <div className="flex gap-2">

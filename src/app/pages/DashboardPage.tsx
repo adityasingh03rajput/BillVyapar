@@ -9,7 +9,13 @@ import {
   TrendingUp, 
   Clock,
   CheckCircle2,
-  XCircle
+  XCircle,
+  MoreVertical,
+  Sun,
+  Moon,
+  Maximize,
+  Play,
+  Monitor
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
@@ -19,6 +25,16 @@ import { prefetchRoutesOnIdle } from '../hooks/usePrefetch';
 import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 import { usePageRefresh } from '../hooks/usePageRefresh';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTour } from '../contexts/TourContext';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '../components/ui/dropdown-menu';
 
 export function DashboardPage() {
   const [analytics, setAnalytics] = useState<any>(null);
@@ -29,6 +45,8 @@ export function DashboardPage() {
   const { accessToken, deviceId } = useAuth();
   const navigate = useNavigate();
   const { profileId } = useCurrentProfile();
+  const { setTheme } = useTheme();
+  const { startTour } = useTour();
 
   const apiUrl = API_URL;
 
@@ -140,6 +158,60 @@ export function DashboardPage() {
               <Plus className="h-4 w-4 mr-2" />
               Create Document
             </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="shrink-0" data-tour-id="dashboard-tools-trigger">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Dashboard Tools</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                
+                <div className="flex items-center justify-around p-2">
+                  <Button variant="ghost" size="sm" onClick={() => setTheme('light')} className="flex flex-col h-auto p-2 gap-1">
+                    <Sun className="h-4 w-4" />
+                    <span className="text-[10px]">Light</span>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setTheme('dark')} className="flex flex-col h-auto p-2 gap-1">
+                    <Moon className="h-4 w-4" />
+                    <span className="text-[10px]">Dark</span>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setTheme('system')} className="flex flex-col h-auto p-2 gap-1 text-muted-foreground">
+                    <Monitor className="h-4 w-4" />
+                    <span className="text-[10px]">System</span>
+                  </Button>
+                </div>
+                
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem onClick={() => {
+                  try {
+                    if (document.fullscreenElement) {
+                      document.exitFullscreen();
+                    } else {
+                      document.documentElement.requestFullscreen();
+                    }
+                  } catch (err) {
+                    console.error('Fullscreen toggle failed', err);
+                  }
+                }} className="flex items-center gap-2 cursor-pointer">
+                  <Maximize className="h-4 w-4" /> 
+                  Toggle Fullscreen
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem onClick={() => startTour()} className="flex items-center gap-2 cursor-pointer">
+                  <Play className="h-4 w-4" /> 
+                  Start Walkthrough
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+                <div className="p-2 text-[10px] text-muted-foreground text-center">
+                  v1.0.4 - Premium Edition
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -215,7 +287,11 @@ export function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            data-tour-id="dashboard-outstanding-card"
+            className="cursor-pointer hover:shadow-md transition-shadow" 
+            onClick={() => navigate('/customers', { state: { filterStatus: 'unpaid' } })}
+          >
             <CardHeader className="pb-3">
               <CardDescription>Outstanding</CardDescription>
               <CardTitle className="text-2xl">

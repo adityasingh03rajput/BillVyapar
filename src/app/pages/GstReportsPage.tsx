@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { getCurrentFiscalYearRange } from '../utils/fiscal';
 import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { FeatureInfo } from '../components/FeatureInfo';
 
 type GstReport = {
   range: { from: string | null; to: string | null };
@@ -95,7 +96,18 @@ export function GstReportsPage() {
     <div className="p-4 sm:p-6 max-w-7xl mx-auto pb-8">
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold text-foreground">GST Reports</h1>
+          <FeatureInfo 
+            title="GST & HSN Compliance"
+            steps={[
+              "Ensure GSTIN is added in Profile and Customer/Supplier masters.",
+              "Add HSN/SAC codes and tax rates (CGST/SGST/IGST) to all Items.",
+              "Inter-state supplies auto-trigger IGST (State Code mismatch).",
+              "Summary is generated from Finalized Invoices and Purchase Bills only."
+            ]}
+          />
+        </div>
           <p className="text-muted-foreground mt-1">Basic GST and HSN summary from invoices</p>
         </div>
       </div>

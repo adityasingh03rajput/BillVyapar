@@ -189,13 +189,18 @@ paymentsRouter.get('/outstanding', async (req, res, next) => {
     const { partyType, partyId } = req.query;
     
     // Build filter based on party type
-    let filter = { userId: req.userId, profileId: req.profileId, type: 'invoice' };
+    let filter = { 
+      userId: new mongoose.Types.ObjectId(String(req.userId)), 
+      profileId: new mongoose.Types.ObjectId(String(req.profileId)), 
+      type: { $in: ['invoice', 'billing'] },
+      status: { $ne: 'draft' } // Only non-draft documents carry balance
+    };
     
-    if (partyType && partyId) {
+    if (partyType && partyId && mongoose.Types.ObjectId.isValid(String(partyId))) {
       if (partyType === 'customer') {
-        filter.customerId = partyId;
+        filter.customerId = new mongoose.Types.ObjectId(String(partyId));
       } else if (partyType === 'supplier') {
-        filter.supplierId = partyId;
+        filter.supplierId = new mongoose.Types.ObjectId(String(partyId));
       }
     }
 

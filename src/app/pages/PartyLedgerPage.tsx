@@ -11,6 +11,7 @@ import { exportHtmlPagesToPdf } from '../pdf';
 import { useRef } from 'react';
 import { getCurrentFiscalYearRange } from '../utils/fiscal';
 import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
+import { FeatureInfo } from '../components/FeatureInfo';
 
 type PartyType = 'customer' | 'supplier';
 
@@ -351,7 +352,18 @@ export function PartyLedgerPage() {
       <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Party Ledger</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold text-foreground">Party Ledger</h1>
+              <FeatureInfo 
+                title="Party Ledger"
+                steps={[
+                  "Entries are automatically generated when an Invoice is Finalized.",
+                  "Payments linked to the document appear as Credit (Receipts) or Debit (Purchases).",
+                  "Closing Balance = Opening Balance + Total Debits - Total Credits.",
+                  "Individual party statements show full transaction history including reference numbers."
+                ]}
+              />
+            </div>
             <p className="text-muted-foreground mt-1">Statement format with opening/running/closing balance</p>
           </div>
           <div className="flex gap-2">

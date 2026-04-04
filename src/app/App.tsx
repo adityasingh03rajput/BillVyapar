@@ -3,6 +3,7 @@ import React from 'react';
 import { createBrowserRouter, createHashRouter, RouterProvider, Outlet, Navigate } from 'react-router';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { TourProvider } from './contexts/TourContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { DisplayProvider } from './contexts/DisplayContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -147,11 +148,13 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <ThemeProvider>
-          <DisplayProvider>
-            <AppInner />
-          </DisplayProvider>
-        </ThemeProvider>
+        <TourProvider>
+          <ThemeProvider>
+            <DisplayProvider>
+              <AppInner />
+            </DisplayProvider>
+          </ThemeProvider>
+        </TourProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

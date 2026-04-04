@@ -59,20 +59,76 @@ analyticsRouter.get('/', async (req, res, next) => {
     // ── Run all aggregations in parallel ──────────────────────────────────────
     const [summaryResult, topItemsResult, monthlyResult] = await Promise.all([
 
-      // 1. Summary stats (totals, counts)
+      // 1. Summary stats (totals, counts, and accurate outstanding)
       Document.aggregate([
         { $match: baseMatch },
         {
-          $group: {
-            _id: null,
-            totalSales:      { $sum: { $cond: [{ $eq: ['$type', 'invoice'] }, '$grandTotal', 0] } },
-            outstanding:     { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $ne: ['$paymentStatus', 'paid'] }] }, '$grandTotal', 0] } },
-            totalInvoices:   { $sum: { $cond: [{ $eq: ['$type', 'invoice'] }, 1, 0] } },
-            totalQuotations: { $sum: { $cond: [{ $eq: ['$type', 'quotation'] }, 1, 0] } },
-            paidInvoices:    { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $eq: ['$paymentStatus', 'paid'] }] }, 1, 0] } },
-            unpaidInvoices:  { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $ne: ['$paymentStatus', 'paid'] }] }, 1, 0] } },
-          },
+          $facet: {
+            basicStats: [
+              {
+                $group: {
+                  _id: null,
+                  totalSales:      { $sum: { $cond: [{ $eq: ['$type', 'invoice'] }, '$grandTotal', 0] } },
+                  totalInvoices:   { $sum: { $cond: [{ $eq: ['$type', 'invoice'] }, 1, 0] } },
+                  totalQuotations: { $sum: { $cond: [{ $eq: ['$type', 'quotation'] }, 1, 0] } },
+                  paidInvoices:    { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $eq: ['$paymentStatus', 'paid'] }] }, 1, 0] } },
+                  unpaidInvoices:  { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'invoice'] }, { $ne: ['$paymentStatus', 'paid'] }] }, 1, 0] } },
+                },
+              },
+            ],
+            outstandingCalc: [
+              { $match: { type: 'invoice', status: { $ne: 'draft' }, paymentStatus: { $ne: 'paid' } } },
+              {
+                $lookup: {
+                  from: 'payments',
+                  let: { docId: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: { $eq: ['$documentId', '$$docId'] },
+                        userId: baseMatch.userId,
+                        profileId: baseMatch.profileId,
+                      },
+                    },
+                    {
+                      $group: {
+                        _id: null,
+                        totalPaid: { $sum: '$amount' },
+                      },
+                    },
+                  ],
+                  as: 'paymentHistory',
+                },
+              },
+              {
+                $addFields: {
+                  paidAmount: { $ifNull: [{ $arrayElemAt: ['$paymentHistory.totalPaid', 0] }, 0] },
+                },
+              },
+              {
+                $addFields: {
+                  remaining: { $max: [0, { $subtract: ['$grandTotal', '$paidAmount'] }] },
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  totalOutstanding: { $sum: '$remaining' },
+                }
+              }
+            ]
+          }
         },
+        {
+          $project: {
+            totalSales:      { $ifNull: [{ $arrayElemAt: ['$basicStats.totalSales', 0] }, 0] },
+            totalInvoices:   { $ifNull: [{ $arrayElemAt: ['$basicStats.totalInvoices', 0] }, 0] },
+            totalQuotations: { $ifNull: [{ $arrayElemAt: ['$basicStats.totalQuotations', 0] }, 0] },
+            paidInvoices:    { $ifNull: [{ $arrayElemAt: ['$basicStats.paidInvoices', 0] }, 0] },
+            unpaidInvoices:  { $ifNull: [{ $arrayElemAt: ['$basicStats.unpaidInvoices', 0] }, 0] },
+            outstanding:     { $ifNull: [{ $arrayElemAt: ['$outstandingCalc.totalOutstanding', 0] }, 0] },
+          }
+        }
       ]),
 
       // 2. Top items by revenue (from invoice line items)

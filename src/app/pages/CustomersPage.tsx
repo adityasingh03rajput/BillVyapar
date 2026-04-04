@@ -6,7 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, Search, User, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, Search, User, Mail, Phone, MapPin, Edit, ChevronLeft, ChevronRight, Trash2, Info, BookOpen, BarChart, FileSpreadsheet, ExternalLink, Clock, Landmark } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL, mkCacheKey } from '../config/api';
 import { usePageRefresh } from '../hooks/usePageRefresh';
@@ -22,7 +22,16 @@ import { PhoneInput, EmailInput, GstinInput, PanInput, PostalCodeInput, AddressI
 import { toast } from 'sonner';
 import { CustomersPageSkeleton } from '../components/PageSkeleton';
 import { MobileFormSheet, MobileFormSection, MobileFormActions } from '../components/MobileFormSheet';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '../components/ui/dropdown-menu';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { FeatureInfo } from '../components/FeatureInfo';
 
 interface Customer {
   id: string;
@@ -62,6 +71,7 @@ export function CustomersPage() {
   const [editFormData, setEditFormData] = useState<Partial<Customer>>({});
   const [editFormErrors, setEditFormErrors] = useState<{ gstin?: string; phone?: string; email?: string }>({});
   const [loading, setLoading] = useState(true);
+  const [customerBalances, setCustomerBalances] = useState<Record<string, number>>({});
   const [gstinLoading, setGstinLoading] = useState(false);
   const [gstinLookupLoading, setGstinLookupLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -213,25 +223,34 @@ export function CustomersPage() {
     if (st?.openCreateDialog) {
       setShowCreateDialog(true);
     }
+    if (st?.filterStatus) {
+      setFilterStatus(st.filterStatus);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [location.state]);
+
+  const [filterStatus, setFilterStatus] = useState<string>('all');
 
   const [visibleCount, setVisibleCount] = useState(20);
 
   useEffect(() => {
+    let filtered = [...customers];
+    
     if (searchTerm) {
-      setFilteredCustomers(
-        customers.filter(c =>
-          c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          c.phone?.includes(searchTerm)
-        )
+      filtered = filtered.filter(c =>
+        c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.phone?.includes(searchTerm)
       );
-    } else {
-      setFilteredCustomers(customers);
     }
+
+    if (filterStatus === 'unpaid') {
+      filtered = filtered.filter(c => (customerBalances[c.id] || 0) > 0);
+    }
+
+    setFilteredCustomers(filtered);
     setVisibleCount(20);
-  }, [searchTerm, customers]);
+  }, [searchTerm, customers, filterStatus, customerBalances]);
 
   const loadCustomers = async ({ force = false }: { force?: boolean } = {}) => {
     if (!accessToken || !deviceId || !profileId) return;
@@ -244,11 +263,35 @@ export function CustomersPage() {
       const data = await response.json();
       if (!data.error) {
         setCustomers(data);
+        // Load balances after customers to show individual outstanding
+        loadOutstandingBalances();
       }
     } catch (error) {
       if (!customers.length) toast.error('Failed to load customers');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOutstandingBalances = async () => {
+    if (!accessToken || !profileId) return;
+    try {
+      const res = await fetch(`${apiUrl}/payments/outstanding?partyType=customer`, {
+        headers: { Authorization: `Bearer ${accessToken}`, 'X-Device-ID': deviceId, 'X-Profile-ID': profileId },
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+
+      const balances: Record<string, number> = {};
+      (data.documents || []).forEach((d: any) => {
+        const cid = d.party?.id;
+        if (cid) {
+          balances[cid] = (balances[cid] || 0) + Number(d.remaining || 0);
+        }
+      });
+      setCustomerBalances(balances);
+    } catch {
+      // silent fail for balances
     }
   };
 
@@ -778,9 +821,20 @@ export function CustomersPage() {
             <p className="text-muted-foreground mt-1">Parties</p>
           </div>
           <div className="flex items-center gap-2 mt-4 md:mt-0">
-            <Button variant="outline" onClick={() => setOutstandingOpen(true)}>
-              Outstanding
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" onClick={() => setOutstandingOpen(true)}>
+                Outstanding
+              </Button>
+              <FeatureInfo 
+                title="Manage Outstanding"
+                steps={[
+                  "Create and Finalize an Invoice (Drafts are excluded).",
+                  "Outstanding = Grand Total - Sum of all linked Payments.",
+                  "Partial payments are automatically calculated from ledger records.",
+                  "Summary cards update instantly after any document or payment change."
+                ]}
+              />
+            </div>
             <Button data-tour-id="cta-add-customer" onClick={() => setShowCreateDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Customer
@@ -997,26 +1051,103 @@ export function CustomersPage() {
                       </div>
                       </div>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditClick(customer)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              title="Party Info & Actions"
+                              data-tour-id="party-info-btn"
+                            >
+                              <Info className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64">
+                            <DropdownMenuLabel className="flex items-center justify-between">
+                              <span>Party Insight</span>
+                              <span className="text-[10px] font-normal px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">v1.0.4</span>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            
+                            <DropdownMenuItem 
+                              className="cursor-pointer"
+                              onClick={() => navigate(`/ledger?partyId=${customer.id}&partyType=customer`)}
+                            >
+                              <BookOpen className="h-4 w-4 mr-2 text-indigo-500" />
+                              <span>Register Ledger</span>
+                            </DropdownMenuItem>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openDeleteDialog(customer)}
-                        className="text-muted-foreground hover:text-destructive"
-                        aria-label="Delete customer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                            <DropdownMenuItem 
+                              className="cursor-pointer"
+                              onClick={() => {
+                                setSearchTerm(customer.name);
+                                setFilterStatus('unpaid');
+                              }}
+                            >
+                              <Clock className="h-4 w-4 mr-2 text-orange-500" />
+                              <span>Outstanding Analysis</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              className="cursor-pointer"
+                              onClick={() => navigate('/analytics', { state: { selectedCustomer: customer.id } })}
+                            >
+                              <BarChart className="h-4 w-4 mr-2 text-emerald-500" />
+                              <span>Customer Analytics</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              className="cursor-pointer"
+                              onClick={() => navigate('/reports/gst', { state: { customerId: customer.id } })}
+                            >
+                              <FileSpreadsheet className="h-4 w-4 mr-2 text-rose-500" />
+                              <span>GST Reports</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              className="cursor-pointer"
+                              onClick={() => navigate('/bank-accounts')}
+                            >
+                              <Landmark className="h-4 w-4 mr-2 text-blue-500" />
+                              <span>Manage Bank Accounts</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator />
+                            <div className="p-2 bg-muted/30 rounded-md m-1">
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Quick Stats</p>
+                              <div className="flex justify-between items-center text-xs">
+                                <span>Balance:</span>
+                                <span className={Number(customerBalances[customer.id] || 0) > 0 ? 'text-orange-600 font-bold' : 'text-green-600'}>
+                                  {formatCurrency(customerBalances[customer.id] || 0)}
+                                </span>
+                              </div>
+                            </div>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditClick(customer)}
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openDeleteDialog(customer)}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          aria-label="Delete customer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -1060,6 +1191,13 @@ export function CustomersPage() {
                             </div>
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {customerBalances[customer.id] > 0 && (
+                      <div className="pt-2 mt-2 border-t flex justify-between items-center">
+                        <span className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Outstanding</span>
+                        <span className="text-sm font-bold text-orange-600">{formatCurrency(customerBalances[customer.id])}</span>
                       </div>
                     )}
                   </CardContent>

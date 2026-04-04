@@ -21,6 +21,7 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { getCurrentFiscalYearRange } from '../utils/fiscal';
 import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
 import { toast } from 'sonner';
+import { FeatureInfo } from '../components/FeatureInfo';
 
 export function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<any>(null);
@@ -167,7 +168,18 @@ export function AnalyticsPage() {
         <div className="mb-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Analytics</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-bold text-foreground">Analytics</h1>
+                <FeatureInfo 
+                  title="Business Analytics"
+                  steps={[
+                    "Summary cards fetch data from Finalized documents only (Sales & Purchase).",
+                    "Use the Date Filter to see trends over a specific fiscal range.",
+                    "Conversion Rate = (Total Invoices / Total Quotations) * 100.",
+                    "Item-wise profit is calculated as (Revenue - Total Item Purchase Cost)."
+                  ]}
+                />
+              </div>
               <p className="text-muted-foreground mt-1">Business insights and performance metrics</p>
             </div>
 

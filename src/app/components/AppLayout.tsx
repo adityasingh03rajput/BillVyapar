@@ -29,6 +29,7 @@ import {
   Minimize2,
   UserCog,
   HelpCircle,
+  MoreVertical,
 } from 'lucide-react';
 const logoImg = '/logo.png';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,6 +37,7 @@ import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { GuidedTour } from './GuidedTour';
+import { useTour } from '../contexts/TourContext';
 import { useTheme, type ThemeMode } from '../contexts/ThemeContext';
 import { TraceLoader } from './TraceLoader';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -47,6 +49,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
+  DropdownMenuItem,
 } from './ui/dropdown-menu';
 import {
   cacheSubscriptionToken,
@@ -68,7 +75,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { theme, setTheme } = useTheme();
   const isNative = useIsNative();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [walkthroughOpen, setWalkthroughOpen] = useState(false);
+  const { isTourOpen, startTour, endTour } = useTour();
   const [subscriptionWarning, setSubscriptionWarning] = useState<string | null>(null);
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
@@ -177,8 +184,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     resolveProfile().catch(() => {});
   }, [accessToken, deviceId]);
 
-  const ThemeSwitcher = ({ compact }: { compact?: boolean }) => {
-    const icon =
+  const GlobalActionsMenu = ({ compact }: { compact?: boolean }) => {
+    const themeIcon =
       theme === 'dark'
         ? Moon
         : theme === 'warm'
@@ -192,11 +199,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 : theme === 'light'
                   ? Sun
                   : Monitor;
-    const Icon = icon;
-
-    const set = (v: string) => {
-      if (v === 'light' || v === 'dark' || v === 'system' || v === 'warm' || v === 'ocean' || v === 'emerald' || v === 'rosewood') setTheme(v as ThemeMode);
-    };
+    const ThemeIcon = themeIcon;
 
     return (
       <DropdownMenu>
@@ -205,46 +208,75 @@ export function AppLayout({ children }: AppLayoutProps) {
             type="button"
             variant="outline"
             size="icon"
-            aria-label="Theme"
-            title="Theme"
-            className={compact ? '' : 'h-9 w-9'}
+            aria-label="Menu"
+            title="Menu"
+            className={compact ? 'h-8 w-8' : 'h-9 w-9'}
           >
-            <Icon className="h-4 w-4" />
+            <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Theme</DropdownMenuLabel>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="flex items-center justify-between">
+            <span>Utility Menu</span>
+            <span className="text-[10px] font-normal px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">v1.0.4</span>
+          </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuRadioGroup value={theme} onValueChange={set}>
-            <DropdownMenuRadioItem value="light">
-              <Sun className="h-4 w-4" />
-              Light
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="warm">
-              <Crown className="h-4 w-4" />
-              Warm
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="ocean">
-              <Droplet className="h-4 w-4" />
-              Ocean
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="emerald">
-              <Leaf className="h-4 w-4" />
-              Emerald
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="rosewood">
-              <Flame className="h-4 w-4" />
-              Rosewood
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="dark">
-              <Moon className="h-4 w-4" />
-              Dark
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="system">
-              <Monitor className="h-4 w-4" />
-              System
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
+          
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <ThemeIcon className="mr-2 h-4 w-4" />
+              <span>Theme</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuPortal>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as ThemeMode)}>
+                  <DropdownMenuRadioItem value="light">
+                    <Sun className="mr-2 h-4 w-4" />
+                    Light
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="warm">
+                    <Crown className="mr-2 h-4 w-4" />
+                    Warm
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="ocean">
+                    <Droplet className="mr-2 h-4 w-4" />
+                    Ocean
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="emerald">
+                    <Leaf className="mr-2 h-4 w-4" />
+                    Emerald
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="rosewood">
+                    <Flame className="mr-2 h-4 w-4" />
+                    Rosewood
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark">
+                    <Moon className="mr-2 h-4 w-4" />
+                    Dark
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="system">
+                    <Monitor className="mr-2 h-4 w-4" />
+                    System
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuPortal>
+          </DropdownMenuSub>
+
+          <DropdownMenuItem onClick={toggleFullscreen}>
+            {isFullscreen ? <Minimize2 className="mr-2 h-4 w-4" /> : <Maximize2 className="mr-2 h-4 w-4" />}
+            <span>{isFullscreen ? 'Fullscreen' : 'Fullscreen'}</span>
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem 
+            onClick={() => isTourOpen ? endTour() : startTour()}
+            className={isTourOpen ? "text-red-600 focus:text-red-600" : "text-blue-600 focus:text-blue-600"}
+          >
+            {isTourOpen ? <LogOut className="mr-2 h-4 w-4" /> : <Truck className="mr-2 h-4 w-4" />}
+            <span>{isTourOpen ? 'Exit Demo Mode' : 'Interactive Walkthrough'}</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     );
@@ -347,7 +379,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
     const key = `walkthroughSeen:${profileId}`;
     if (localStorage.getItem(key) === '1') return;
-    setWalkthroughOpen(true);
+    startTour();
   }, [accessToken, profileGateChecked, location.pathname]);
 
   useEffect(() => {
@@ -591,12 +623,14 @@ export function AppLayout({ children }: AppLayoutProps) {
       ) : (
       <>
       <GuidedTour
-        open={walkthroughOpen}
+        open={isTourOpen}
         onOpenChange={(open) => {
-          setWalkthroughOpen(open);
           if (!open) {
+            endTour();
             const profileId = readCurrentProfile()?.id;
             if (profileId) localStorage.setItem(`walkthroughSeen:${profileId}`, '1');
+          } else {
+            startTour();
           }
         }}
       />
@@ -611,32 +645,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <img src={logoImg} alt="BillVyapar" className="h-12 w-12 rounded-2xl shadow-sm object-contain" />
             <h1 className="text-2xl font-bold text-foreground">BillVyapar</h1>
             <div className="ml-auto flex items-center gap-2">
-              <ThemeSwitcher />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={toggleFullscreen}
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                className="h-9 w-9"
-              >
-                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setWalkthroughOpen(true)}
-                aria-label="Open tour"
-                title="Tour"
-                data-tour-id="tour-trigger"
-                className="group h-9 w-9 travel-glow border-glow border-glow-hover border-blue-500/60 text-blue-600 hover:border-blue-500"
-              >
-                <span className="icon-aura icon-aura-hover">
-                  <Truck className="h-4 w-4 neon-target neon-hover" />
-                </span>
-              </Button>
+              <GlobalActionsMenu />
             </div>
           </div>
           {currentProfile.businessName && (
@@ -721,35 +730,12 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Mobile Header */}
         <header className="lg:hidden bg-background border-b border-border p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <img src={logoImg} alt="BillVyapar" className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl shrink-0 shadow-sm object-contain" />
             <h1 className="text-xl font-bold">BillVyapar</h1>
-            <ThemeSwitcher compact />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={toggleFullscreen}
-              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              className="h-9 w-9"
-            >
-              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => setWalkthroughOpen(true)}
-              aria-label="Open tour"
-              title="Tour"
-              data-tour-id="tour-trigger"
-              className="group h-9 w-9 travel-glow border-glow border-glow-hover border-blue-500/60 text-blue-600 hover:border-blue-500"
-            >
-              <span className="icon-aura icon-aura-hover">
-                <Truck className="h-4 w-4 neon-target neon-hover" />
-              </span>
-            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <GlobalActionsMenu compact />
+            </div>
           </div>
           
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -845,16 +831,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                       <p className="text-sm text-muted-foreground mt-1">
                         Your subscription has expired. Renew to continue using the service.
                       </p>
-                      {typeof daysRemaining === 'number' && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Days remaining: {daysRemaining}
-                        </p>
-                      )}
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                  <div className="mt-6 flex gap-3">
                     <Button className="flex-1" onClick={() => navigate('/subscription')}>
-                      Renew Now
+                      Renew Subscription
                     </Button>
                     <Button variant="outline" className="flex-1" onClick={signOut}>
                       Sign Out

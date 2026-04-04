@@ -33,6 +33,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
+import { useTour } from '../contexts/TourContext';
 import { TraceLoader } from '../components/TraceLoader';
 import { INDIAN_STATES } from '../utils/indianStates';
 import {
@@ -111,6 +112,7 @@ export function CreateDocumentPage() {
   
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { isDemoMode } = useTour();
 
   const [optionsOpen, setOptionsOpen] = useState(false);
 
@@ -673,6 +675,54 @@ export function CreateDocumentPage() {
     setSaving(false);
     // Add other state resets here if needed
   }, [profile?.id]);
+
+  // Demo Mode Pre-fill
+  useEffect(() => {
+    if (!isDemoMode) return;
+    
+    // Virtual delay to simulate real app feel
+    const timer = setTimeout(() => {
+      setCustomerName('Global Tech Solutions Pvt Ltd');
+      setCustomerAddress('123, Dynamic Tower, Silicon Valley, Bengaluru, KA - 560001');
+      setCustomerGstin('29ABCDE1234F1Z5');
+      setCustomerMobile('9876543210');
+      setCustomerEmail('purchasing@globaltech.com');
+      setPlaceOfSupply('Karnataka');
+      setItems([
+        {
+          name: 'Professional Business Laptop',
+          hsnSac: '8471',
+          description: 'High performance laptop with 32GB RAM',
+          quantity: 2,
+          unit: 'pcs',
+          rate: 55000,
+          currency: 'INR',
+          discount: 10,
+          cgst: 9,
+          sgst: 9,
+          igst: 0,
+          total: 99000
+        },
+        {
+          name: 'Cloud Infrastructure Setup',
+          hsnSac: '9983',
+          description: 'One-time setup fee',
+          quantity: 1,
+          unit: 'set',
+          rate: 15000,
+          currency: 'INR',
+          discount: 0,
+          cgst: 9,
+          sgst: 9,
+          igst: 0,
+          total: 17700
+        }
+      ]);
+      toast.info('Demo Mode: Pre-filled with virtual data.');
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [isDemoMode]);
 
   // Keep in sync when AppLayout refreshes profile from the server on mount
   // Handled by useCurrentProfile hook now
@@ -1688,6 +1738,16 @@ export function CreateDocumentPage() {
         return;
       }
     }
+    
+    if (isDemoMode) {
+      setSaving(true);
+      setTimeout(() => {
+        setSaving(false);
+        toast.success('(Demo Mode) Document virtually saved! No real data was changed.');
+        navigate('/documents');
+      }, 1000);
+      return;
+    }
 
     try {
       const totals = type === 'invoice_cancellation'
@@ -2332,7 +2392,7 @@ export function CreateDocumentPage() {
             <Card className="shadow-sm">
               <CardContent className="p-0">
                 <div className="w-full overflow-auto">
-                  <div className="min-w-[1100px]">
+                  <div className="min-w-[1100px] item-table-header" data-tour-id="item-table-header">
                     <div className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] sticky top-0 z-[1] bg-muted/50 backdrop-blur supports-[backdrop-filter]:bg-muted/40 text-xs font-semibold text-muted-foreground border-b">
                       <div className="px-2 py-2">#</div>
                       <div className="px-2 py-2">ITEM</div>
@@ -3506,7 +3566,7 @@ export function CreateDocumentPage() {
         <Button type="button" variant="outline" onClick={() => navigate('/documents')}>
           Cancel
         </Button>
-        <Button onClick={handleSave} disabled={saving} className="px-6">
+        <Button onClick={handleSave} disabled={saving} className="px-6" data-tour-id="cta-save-document">
           <Save className="h-4 w-4 mr-2" />
           {saving ? 'Saving...' : 'Save'}
         </Button>

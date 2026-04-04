@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
+import { FeatureInfo } from '../components/FeatureInfo';
 
 type PartyType = 'customer' | 'supplier';
 
@@ -473,6 +474,16 @@ export function VyaparKhataPageNew() {
               >
                 Suppliers
               </button>
+              
+              <FeatureInfo 
+                title="Vyapar Khata (Credit Register)"
+                steps={[
+                  "Use this for manual credit/debit tracking without full invoices.",
+                  "'You Gave' (Red) = money you paid out or credit you gave.",
+                  "'You Got' (Green) = money you received or credit cleared.",
+                  "Net Balance = Total Got - Total Gave (Automatically tracked per party)."
+                ]}
+              />
 
               <div className="ml-auto">
                 <Button type="button" variant="outline" size="sm" onClick={() => loadLeft()}>
