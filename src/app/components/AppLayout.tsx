@@ -307,7 +307,15 @@ export function AppLayout({ children }: AppLayoutProps) {
 
     const msg = result.message || 'Subscription expired. Please renew to continue service.';
     setSubscriptionWarning(msg);
-    setSubscriptionExpired(true);
+
+    // FIX: If we have valid days remaining, don't lock the user out (even on offline_too_long)
+    if (typeof result.daysRemaining === 'number' && result.daysRemaining > 0) {
+      setDaysRemaining(result.daysRemaining);
+      setSubscriptionExpired(false);
+    } else {
+      setSubscriptionExpired(true);
+    }
+
     showSubscriptionToastOncePerDay(
       source === 'cache' ? `${msg} (offline check)` : msg,
       'error'

@@ -94,9 +94,10 @@ subscriptionRouter.get('/validate', requireProfile, async (req, res, next) => {
     }
 
     // ── 2. Trial window ────────────────────────────────────────────────────
-    const [user, subscriber] = await Promise.all([
+    const [user, subscriber, paidSub] = await Promise.all([
       User.findById(checkId).lean(),
       Subscriber.findOne({ ownerUserId: checkId }).lean(),
+      Subscription.findOne({ userId: checkId }).lean(),
     ]);
 
     if (!user) return res.status(401).json({ error: 'User not found' });
@@ -120,6 +121,28 @@ subscriptionRouter.get('/validate', requireProfile, async (req, res, next) => {
           plan: 'trial',
           startDate: user.createdAt.toISOString(),
           endDate: trialEnd.toISOString(),
+          active: true,
+        },
+      });
+    }
+
+    // ── 3. Paid subscription ───────────────────────────────────────────────
+    if (paidSub && paidSub.active && paidSub.endDate > now) {
+      const token = signSubscriptionToken({
+        userId: req.userId,
+        profileId: req.profileId,
+        plan: paidSub.plan,
+        endDate: paidSub.endDate,
+      });
+      return res.json({
+        ok: true,
+        serverNow: now.toISOString(),
+        token,
+        subscription: {
+          userId: String(req.userId),
+          plan: paidSub.plan,
+          startDate: paidSub.startDate.toISOString(),
+          endDate: paidSub.endDate.toISOString(),
           active: true,
         },
       });
