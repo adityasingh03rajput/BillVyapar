@@ -59,6 +59,12 @@ const normalizeElementColors = (doc: Document, el: HTMLElement) => {
   }
 };
 
+import { savePdfWithDialog } from '../utils/saveFile';
+
+const smartSave = async (pdf: jsPDF, filename: string) => {
+  await savePdfWithDialog(pdf, filename);
+};
+
 export async function exportElementToPdf(params: {
   element: HTMLElement;
   filename: string;
@@ -69,7 +75,7 @@ export async function exportElementToPdf(params: {
   marginPt?: number;
 }) {
   const { element, filename } = params;
-  const scale = Number.isFinite(params.scale) ? Math.max(0.5, Number(params.scale)) : Math.max(2, window.devicePixelRatio || 1);
+  const scale = Number.isFinite(params.scale) ? Math.max(0.5, Number(params.scale)) : 2;
   const imageFormat = params.imageFormat || 'PNG';
   const jpegQuality = Number.isFinite(params.jpegQuality) ? Math.min(1, Math.max(0.1, Number(params.jpegQuality))) : 0.8;
   const marginPt = Number.isFinite(params.marginPt) ? Math.max(0, Number(params.marginPt)) : 0;
@@ -83,26 +89,27 @@ export async function exportElementToPdf(params: {
     backgroundColor: '#ffffff',
     useCORS: true,
     logging: false,
+    width: 794,
+    height: 1123,
     onclone: (clonedDoc) => {
       try {
-        // Tailwind v4 uses oklch() in generated CSS. html2canvas cannot reliably parse it.
-        // Removing stylesheets avoids the parser path that throws `unsupported color function oklch`.
-        clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach((n) => n.remove());
-
-        const root = clonedDoc.body.querySelector('[data-slot="card"], body') as HTMLElement | null;
-        const target = root || (clonedDoc.body as any);
-        if (!target) return;
-
+        const target = clonedDoc.getElementById('pdf-capture-node') || clonedDoc.body;
         if (target instanceof HTMLElement) {
-          normalizeElementColors(clonedDoc, target);
-        }
+          target.style.transform = 'none';
+          target.style.transformOrigin = 'unset';
+          target.style.margin = '0';
+          target.style.position = 'absolute';
+          target.style.top = '0';
+          target.style.left = '0';
+          target.style.width = '210mm';
+          target.style.height = '297mm';
 
-        const nodes = clonedDoc.body.querySelectorAll<HTMLElement>('*');
-        nodes.forEach((n) => {
-          normalizeElementColors(clonedDoc, n);
-        });
-      } catch {
-        // ignore
+          const nodes = target.querySelectorAll<HTMLElement>('*');
+          normalizeElementColors(clonedDoc, target);
+          nodes.forEach((n) => normalizeElementColors(clonedDoc, n));
+        }
+      } catch (err) {
+        console.warn('PDF Export Error:', err);
       }
     },
   });
@@ -111,34 +118,9 @@ export async function exportElementToPdf(params: {
     ? canvas.toDataURL('image/jpeg', jpegQuality)
     : canvas.toDataURL('image/png');
 
-  const pdf = new jsPDF({
-    orientation: 'p',
-    unit: 'pt',
-    format: 'a4',
-  });
-
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-
-  const innerWidth = Math.max(0, pageWidth - marginPt * 2);
-  const innerHeight = Math.max(0, pageHeight - marginPt * 2);
-  const imgWidth = innerWidth || pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  let heightLeft = imgHeight;
-  let position = marginPt;
-
-  pdf.addImage(imgData, imageFormat, marginPt, position, imgWidth, imgHeight, undefined, 'FAST');
-  heightLeft -= innerHeight || pageHeight;
-
-  while (heightLeft > 0) {
-    position -= innerHeight || pageHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, imageFormat, marginPt, position, imgWidth, imgHeight, undefined, 'FAST');
-    heightLeft -= innerHeight || pageHeight;
-  }
-
-  pdf.save(filename);
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  pdf.addImage(imgData, imageFormat, 0, 0, 210, 297, undefined, 'FAST');
+  await smartSave(pdf, filename);
 }
 
 export async function exportElementToPdfBlobUrl(params: {
@@ -152,82 +134,52 @@ export async function exportElementToPdfBlobUrl(params: {
 }) {
   const { element, filename } = params;
 
-  const scale = Number.isFinite(params.scale) ? Math.max(0.5, Number(params.scale)) : Math.max(2, window.devicePixelRatio || 1);
+  // Use a higher scale for better quality, but cap it to prevent memory issues
+  const scale = Number.isFinite(params.scale) ? Math.max(0.5, Number(params.scale)) : 2;
   const imageFormat = params.imageFormat || 'PNG';
   const jpegQuality = Number.isFinite(params.jpegQuality) ? Math.min(1, Math.max(0.1, Number(params.jpegQuality))) : 0.8;
   const marginPt = Number.isFinite(params.marginPt) ? Math.max(0, Number(params.marginPt)) : 0;
 
+  // Ensure element is ready
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
 
+  // html2canvas struggles with transforms. We clone and reset them.
   const canvas = await html2canvas(element, {
     scale,
     backgroundColor: '#ffffff',
-    useCORS: true,
-    logging: false,
+    width: 794,
+    height: 1123,
     onclone: (clonedDoc) => {
       try {
-        clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach((n) => n.remove());
-
-        const root = clonedDoc.body.querySelector('[data-slot="card"], body') as HTMLElement | null;
-        const target = root || (clonedDoc.body as any);
-        if (!target) return;
-
+        const target = clonedDoc.getElementById('pdf-capture-node') || clonedDoc.body;
         if (target instanceof HTMLElement) {
-          normalizeElementColors(clonedDoc, target);
-        }
+          target.style.transform = 'none';
+          target.style.transformOrigin = 'unset';
+          target.style.margin = '0';
+          target.style.position = 'absolute';
+          target.style.top = '0';
+          target.style.left = '0';
+          target.style.width = '210mm';
+          target.style.height = '297mm';
 
-        const nodes = clonedDoc.body.querySelectorAll<HTMLElement>('*');
-        nodes.forEach((n) => {
-          normalizeElementColors(clonedDoc, n);
-        });
-      } catch {
-        // ignore
+          const nodes = target.querySelectorAll<HTMLElement>('*');
+          normalizeElementColors(clonedDoc, target);
+          nodes.forEach((n) => normalizeElementColors(clonedDoc, n));
+        }
+      } catch (err) {
+        console.warn('PDF Clone Normalization failed:', err);
       }
     },
   });
 
-  const imgData = imageFormat === 'JPEG'
-    ? canvas.toDataURL('image/jpeg', jpegQuality)
-    : canvas.toDataURL('image/png');
-
-  const pdf = new jsPDF({
-    orientation: 'p',
-    unit: 'pt',
-    format: 'a4',
-  });
-
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-
-  const innerWidth = Math.max(0, pageWidth - marginPt * 2);
-  const innerHeight = Math.max(0, pageHeight - marginPt * 2);
-  const imgWidth = innerWidth || pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  let heightLeft = imgHeight;
-  let position = marginPt;
-
-  pdf.addImage(imgData, imageFormat, marginPt, position, imgWidth, imgHeight, undefined, 'FAST');
-  heightLeft -= innerHeight || pageHeight;
-
-  while (heightLeft > 0) {
-    position -= innerHeight || pageHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, imageFormat, marginPt, position, imgWidth, imgHeight, undefined, 'FAST');
-    heightLeft -= innerHeight || pageHeight;
-  }
-
+  const imgData = imageFormat === 'JPEG' ? canvas.toDataURL('image/jpeg', jpegQuality) : canvas.toDataURL('image/png');
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  pdf.addImage(imgData, imageFormat, 0, 0, 210, 297, undefined, 'FAST');
   const blob = pdf.output('blob');
   const url = URL.createObjectURL(blob);
-  try {
-    if (filename) {
-      (window as any).__billvyapar_last_pdf_filename = filename;
-    }
-  } catch {
-    // ignore
-  }
+  if (filename) { try { (window as any).__billvyapar_last_pdf_filename = filename; } catch {} }
   return url;
 }
 
@@ -288,5 +240,5 @@ export async function exportHtmlPagesToPdf(params: {
     pdf.text(label, pageWidth - 36, pageHeight - 18, { align: 'right' });
   }
 
-  pdf.save(filename);
+  await smartSave(pdf, filename);
 }

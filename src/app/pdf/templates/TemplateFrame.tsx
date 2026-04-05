@@ -5,13 +5,17 @@ export function TemplateFrame({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        width: 794,
-        minHeight: 1123,
-        padding: 32,
+        width: '210mm',
+        minHeight: '297mm',
+        padding: '10mm',
         color: '#111827',
         background: '#ffffff',
         fontFamily:
           'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
+        boxSizing: 'border-box',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {children}
