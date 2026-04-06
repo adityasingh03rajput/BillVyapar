@@ -91,11 +91,11 @@ export function ModernTemplate({ doc, profile }: PdfTemplateProps) {
                 )}
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: 0.6, lineHeight: 1.05 }}>
+                <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '0.02em', lineHeight: '1.2' }}>
                   {String(docTitleFromType(doc.type) || 'DOCUMENT').toUpperCase()}
                 </div>
                 {!!doc.invoiceNo && (
-                  <div style={{ fontSize: 11, opacity: 0.9, marginTop: 4, fontWeight: 700 }}>
+                  <div style={{ fontSize: 10, opacity: 0.85, marginTop: 2, fontWeight: 600 }}>
                     {safeText(doc.invoiceNo)}
                   </div>
                 )}
