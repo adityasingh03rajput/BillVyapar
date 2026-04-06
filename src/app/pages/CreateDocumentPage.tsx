@@ -1720,6 +1720,26 @@ export function CreateDocumentPage() {
     const next = parseFloat((rounded - grandTotal).toFixed(2));
     setRoundOff(next);
   }, [autoRoundOff, items, transportCharges, additionalCharges, packingHandlingCharges, tcs]);
+
+  // REACTIVE UPI QR GENERATION
+  useEffect(() => {
+    const generateQr = async () => {
+      const cleanUpi = String(upiId || '').trim();
+      if (!cleanUpi) {
+        setUpiQrText('');
+        return;
+      }
+      const { grandTotal } = calculateTotals();
+      const upiUri = `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(profile?.businessName || '')}&am=${grandTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(invoiceNo || 'Payment')}`;
+      try {
+        const qr = await QRCode.toDataURL(upiUri, { margin: 1, width: 240 });
+        setUpiQrText(qr);
+      } catch {
+        setUpiQrText('');
+      }
+    };
+    generateQr();
+  }, [upiId, items, transportCharges, additionalCharges, packingHandlingCharges, tcs, roundOff, invoiceNo, profile?.businessName]);
   const shouldShowPaymentMode = true;
 
   const partyLabel = partyKind === 'supplier' ? 'Supplier' : 'Customer';
@@ -1829,7 +1849,6 @@ export function CreateDocumentPage() {
       
       if (data.error) {
         if (data.code === 'FINAL_DOCUMENT_LOCKED') {
-          // Document was finalized in DB — revert to draft and let user re-save
           setStatus('draft');
           toast.info('Status reverted to Draft. You can now edit and re-save.', { duration: 4000 });
         } else {
@@ -1837,6 +1856,69 @@ export function CreateDocumentPage() {
         }
       } else {
         toast.success(isEdit ? 'Document updated!' : 'Document created!');
+        
+        // ── Automatic Vyapar Khata Sync ────────────────────────────────────────/
+        const finalStatus = (payload.status === 'final');
+        const validParty = !!(payload.customerId || payload.supplierId);
+        
+        if (finalStatus && validParty && !isDemoMode) {
+          try {
+            const pId = payload.customerId || payload.supplierId;
+            const pType = payload.customerId ? 'customer' : 'supplier';
+            const docTotal = Number(payload.grandTotal || 0);
+            const amtPaid = Number(payload.receivedAmount || 0);
+            const docNo = payload.invoiceNo || payload.documentNumber || 'Document';
+
+            // 1. Record the Bill (Sales Invoice: We 'gave' credit/goods; Purchase: We 'got' goods/credit)
+            await fetch(`${API_URL}/vyapar-khata/entries`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+                'X-Device-ID': deviceId,
+                'X-Profile-ID': profile?.id,
+              },
+              body: JSON.stringify({
+                partyType: pType,
+                partyId: pId,
+                direction: pType === 'customer' ? 'gave' : 'got',
+                amount: docTotal,
+                date: payload.date || new Date().toISOString(),
+                method: 'cash',
+                notes: `Auto-Sync: ${payload.type.toUpperCase()} #${docNo}`,
+                reference: docNo
+              })
+            });
+
+            // 2. Record the Payment (If any)
+            if (amtPaid > 0) {
+              await fetch(`${API_URL}/vyapar-khata/entries`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${accessToken}`,
+                  'X-Device-ID': deviceId,
+                  'X-Profile-ID': profile?.id,
+                },
+                body: JSON.stringify({
+                  partyType: pType,
+                  partyId: pId,
+                  direction: pType === 'customer' ? 'got' : 'gave',
+                  amount: amtPaid,
+                  date: payload.date || new Date().toISOString(),
+                  method: payload.paymentMode || 'cash',
+                  notes: `Auto-Sync: Payment for ${payload.type.toUpperCase()} #${docNo}`,
+                  reference: docNo
+                })
+              });
+            }
+          } catch (khataErr) {
+            console.error('Khata Sync Error:', khataErr);
+            toast.error('Document saved, but Khata sync failed.');
+          }
+        }
+        // ────────────────────────────────────────────────────────────────────────/
+
         window.dispatchEvent(new CustomEvent('dashboardRefresh'));
         navigate('/documents');
       }
@@ -2038,9 +2120,9 @@ export function CreateDocumentPage() {
 
   return (
     <>
-      <div className="bg-muted/30">
-      <div>
-        <div className="space-y-4">
+      <div className="bg-muted/30 pb-40 md:pb-12 min-h-screen">
+      <div className="p-4 md:p-6">
+        <div className="space-y-4 max-w-[1600px] mx-auto">
             {/* Finalized document warning banner */}
             {isEdit && status === 'final' && (
               <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3">
@@ -2234,7 +2316,7 @@ export function CreateDocumentPage() {
                                 {presetCustomers.map((c) => (
                                   <CommandItem
                                     key={c.id}
-                                    value={c.name}
+                                    value={`${c.name} ${c.phone || ''} ${c.gstin || ''}`.toLowerCase().trim()}
                                     onSelect={() => {
                                       const nextId = String(c.id);
                                       setPartyId(nextId);
@@ -2499,11 +2581,11 @@ export function CreateDocumentPage() {
               </Card>
             ) : null}
 
-            <Card className="shadow-sm">
+            <Card className="shadow-none border-border/20 bg-transparent">
               <CardContent className="p-0">
-                <div className="w-full overflow-auto">
-                  <div className="min-w-[1100px] item-table-header" data-tour-id="item-table-header">
-                    <div className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] sticky top-0 z-[1] bg-muted/50 backdrop-blur supports-[backdrop-filter]:bg-muted/40 text-xs font-semibold text-muted-foreground border-b">
+                <div className="w-full max-h-[70vh] overflow-x-auto overflow-y-auto !touch-pan-x !touch-pan-y scrollbar-thin scrollbar-thumb-indigo-500/20 scrollbar-track-transparent rounded-2xl border border-border/30 bg-background/30 backdrop-blur-3xl">
+                  <div className="min-w-[1600px] item-table-header p-4" data-tour-id="item-table-header">
+                    <div className="grid grid-cols-[40px_2.5fr_100px_100px_180px_80px_120px_80px_120px_180px_50px] sticky top-0 z-[20] bg-muted/60 backdrop-blur-2xl text-[10px] uppercase font-black tracking-widest text-muted-foreground border border-border/10 rounded-xl mb-4 !touch-pan-x !touch-pan-y">
                       <div className="px-2 py-2">#</div>
                       <div className="px-2 py-2">ITEM</div>
                       <div className="px-2 py-2">QTY</div>
@@ -2563,15 +2645,15 @@ export function CreateDocumentPage() {
                     {items.map((it, idx) => {
                       const row = proformaRowComputed(it);
                       return (
-                        <div key={idx} className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] border-b bg-background">
+                        <div key={idx} className="grid grid-cols-[40px_2fr_80px_90px_160px_70px_110px_70px_110px_160px_40px] border-b bg-background !touch-pan-x !touch-pan-y">
                           <div className="px-2 py-2 text-xs text-muted-foreground">{idx + 1}</div>
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Popover
                               open={!!proformaItemPopoverOpen[idx]}
                               onOpenChange={(open) => setProformaItemPopoverOpen((prev) => ({ ...prev, [idx]: open }))}
                             >
                               <PopoverTrigger asChild>
-                                <Button type="button" variant="outline" role="combobox" className="w-full justify-between">
+                                <Button type="button" variant="outline" role="combobox" className="w-full justify-between !touch-pan-x !touch-pan-y">
                                   <span className="truncate">{it.name?.trim() ? it.name : 'Select item'}</span>
                                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
@@ -2634,12 +2716,12 @@ export function CreateDocumentPage() {
                               </PopoverContent>
                             </Popover>
                           </div>
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Input type="number" value={it.quantity} onChange={(e) => updateItem(idx, 'quantity', Number(e.target.value || 0))} />
                           </div>
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Select value={String(it.unit || 'NONE')} onValueChange={(v) => updateItem(idx, 'unit', v)}>
-                              <SelectTrigger>
+                              <SelectTrigger className="!touch-pan-x !touch-pan-y">
                                 <SelectValue placeholder="NONE" />
                               </SelectTrigger>
                               <SelectContent>
@@ -2653,13 +2735,13 @@ export function CreateDocumentPage() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Input type="number" value={it.rate} onChange={(e) => updateItem(idx, 'rate', Number(e.target.value || 0))} />
                           </div>
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Input type="number" value={it.discount} onChange={(e) => updateItem(idx, 'discount', Number(e.target.value || 0))} />
                           </div>
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Input
                               type="number"
                               value={Number.isFinite(row.discountAmount) ? Number(row.discountAmount || 0).toFixed(2) : '0.00'}
@@ -2672,7 +2754,7 @@ export function CreateDocumentPage() {
                             />
                           </div>
                           {/* TAX — clean dropdown + popover for CGST/SGST/IGST editing */}
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Select
                               value={['0','5','12','18','28'].includes(String(row.taxPct)) ? String(row.taxPct) : 'custom'}
                               onValueChange={(v) => {
@@ -2684,7 +2766,7 @@ export function CreateDocumentPage() {
                                 updateItem(idx, 'sgst', half);
                               }}
                             >
-                              <SelectTrigger>
+                              <SelectTrigger className="!touch-pan-x !touch-pan-y">
                                 <span>{row.taxPct === 0 ? 'No Tax' : `${row.taxPct}% GST`}</span>
                               </SelectTrigger>
                               <SelectContent side="top">
@@ -2700,10 +2782,10 @@ export function CreateDocumentPage() {
                             </Select>
                           </div>
                           {/* TAX AMOUNT — click to edit CGST/SGST/IGST individually */}
-                          <div className="px-2 py-2">
+                          <div className="px-2 py-2 !touch-pan-x !touch-pan-y">
                             <Popover>
                               <PopoverTrigger asChild>
-                                <button type="button" className="w-full text-left">
+                                <button type="button" className="w-full text-left !touch-pan-x !touch-pan-y">
                                   <Input
                                     readOnly
                                     value={Number(row.taxAmount || 0).toFixed(2)}
@@ -2748,10 +2830,10 @@ export function CreateDocumentPage() {
                             </Popover>
                           </div>
                           {/* AMOUNT */}
-                          <div className="px-2 py-2 text-right font-semibold">
+                          <div className="px-2 py-2 text-right font-semibold !touch-pan-x !touch-pan-y">
                             {formatInr(row.amount)}
                           </div>
-                          <div className="px-2 py-2 flex items-center justify-center">
+                          <div className="px-2 py-2 flex items-center justify-center !touch-pan-x !touch-pan-y">
                             <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(idx)} aria-label="Remove row">
                               <Trash2 className="h-4 w-4 text-muted-foreground" />
                             </Button>
@@ -2839,7 +2921,7 @@ export function CreateDocumentPage() {
                                 setUpiQrText(String(selected?.upiQrText || ''));
                               }}
                             >
-                              <SelectTrigger>
+                              <SelectTrigger className="!touch-pan-x !touch-pan-y">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
@@ -3057,7 +3139,7 @@ export function CreateDocumentPage() {
                             <Label>Payment Type</Label>
                             <div className="flex items-center gap-2 mt-1">
                               <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                                <SelectTrigger>
+                                <SelectTrigger className="!touch-pan-x !touch-pan-y">
                                   <SelectValue placeholder="Select" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -3068,7 +3150,7 @@ export function CreateDocumentPage() {
                               </Select>
 
                               <Select value={paymentStatus} onValueChange={(v) => setPaymentStatus(v as 'unpaid' | 'partial' | 'paid')}>
-                                <SelectTrigger>
+                                <SelectTrigger className="!touch-pan-x !touch-pan-y">
                                   <SelectValue placeholder="Status" />
                                 </SelectTrigger>
                                 <SelectContent>
