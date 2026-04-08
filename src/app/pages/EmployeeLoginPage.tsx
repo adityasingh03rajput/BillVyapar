@@ -128,7 +128,15 @@ export function EmployeeLoginPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4a3a' }}>Password</label>
               </div>
-              <input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} style={webInputStyle} />
+              <div style={{ position: 'relative' }}>
+                <input type={showPass ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} style={{ ...webInputStyle, paddingRight: 40 }} />
+                <button type="button" onClick={() => setShowPass(!showPass)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 40, border: 'none', background: 'none', cursor: 'pointer', color: '#6a6a5a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {showPass 
+                    ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
             </div>
             <button type="submit" disabled={loading} style={{ width: '100%', padding: '13px', marginTop: 4, background: loading ? 'rgba(79,70,229,0.4)' : 'linear-gradient(90deg,#4f46e5,#7c3aed)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 15, cursor: loading ? 'not-allowed' : 'pointer', boxShadow: loading ? 'none' : '0 4px 16px rgba(79,70,229,0.4)', fontFamily: 'Manrope, sans-serif', letterSpacing: '0.02em' }}>
               {loading ? 'Please wait…' : 'Sign In'}
