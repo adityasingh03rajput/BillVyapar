@@ -1,0 +1,17 @@
+
+FAILURE: Build failed with an exception.
+
+* Where:
+Build file 'D:\hukum\android\build.gradle' line: 31
+
+* What went wrong:
+A problem occurred evaluating root project 'android'.
+> Could not get unknown property 'org' for root project 'android' of type org.gradle.api.Project.
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1s

@@ -3,20 +3,23 @@ import { useNavigate } from 'react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Check, Crown, Zap } from 'lucide-react';
+import { Check, Crown, Zap, ArrowUpRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import { toast } from 'sonner';
 import { TraceLoader } from '../components/TraceLoader';
 import { cacheSubscriptionToken, validateSubscriptionTokenOnline } from '../utils/subscriptionValidation';
+import { useIsNative } from '../hooks/useIsNative';
 
 export function WelcomePage() {
   const navigate = useNavigate();
   const { accessToken, deviceId } = useAuth();
+  const isNative = useIsNative();
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<any>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [checkingProfiles, setCheckingProfiles] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
   const currentProfile = JSON.parse(localStorage.getItem('currentProfile') || '{}');
   const profileId = currentProfile?.id;
 
@@ -118,10 +121,10 @@ export function WelcomePage() {
       }
     };
 
-    if (!loading) {
+    if (!loading && isNative) {
       maybeRedirectToProfiles();
     }
-  }, [accessToken, checkingProfiles, deviceId, isActive, loading, navigate]);
+  }, [accessToken, checkingProfiles, deviceId, isActive, loading, navigate, isNative]);
 
   const features = [
     'Unlimited business profiles',
@@ -148,8 +151,108 @@ export function WelcomePage() {
     );
   }
 
+  if (!isNative) {
+    return (
+      <div className={`fixed inset-0 bg-[#020205] overflow-hidden transition-all duration-[1200ms] cubic-bezier(0.85, 0, 0.15, 1) z-[100] ${isOpening ? '-translate-y-full' : 'translate-y-0'}`}>
+        {/* Immersive Cinematic Background */}
+        <div className="absolute inset-0 pointer-events-none scale-110">
+          <div className="absolute top-[-15%] left-[-15%] w-[60%] h-[60%] bg-primary/30 blur-[140px] rounded-full animate-pulse opacity-60" />
+          <div className="absolute bottom-[-15%] right-[-15%] w-[60%] h-[60%] bg-emerald-500/20 blur-[140px] rounded-full animate-pulse delay-1000 opacity-40" />
+          <div className="absolute top-[20%] right-[10%] w-[30%] h-[30%] bg-blue-500/20 blur-[120px] rounded-full animate-pulse delay-700 opacity-30" />
+          
+          {/* Grid/Texture overlay */}
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.08] mix-blend-overlay" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#020205]/40 to-[#020205]" />
+        </div>
+
+        <div className="relative h-screen flex flex-col items-center justify-center p-6 [perspective:2500px]">
+          {/* Interactive Floating 3D Component */}
+          <div 
+            className={`w-full max-w-2xl bg-white/[0.03] backdrop-blur-[40px] border border-white/10 rounded-[4rem] p-16 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] transition-all duration-1000 ease-out hover:[transform:rotateX(6deg)_rotateY(-6deg)_translateZ(20px)] group ${isOpening ? 'opacity-0 scale-95 duration-500' : 'opacity-100 scale-100'}`}
+            style={{ 
+              transformStyle: 'preserve-3d',
+              boxShadow: '0 0 1px 1px rgba(255,255,255,0.1), 0 25px 50px -12px rgba(0,0,0,0.5)'
+            }}
+          >
+            <div className="relative z-10 space-y-12 text-center" style={{ transformStyle: 'preserve-3d' }}>
+              
+              {/* Floating Icon Container */}
+              <div className="relative inline-block mb-4 [transform:translateZ(100px)]">
+                <div className="absolute inset-0 bg-primary blur-[60px] opacity-40 group-hover:opacity-60 transition-opacity duration-1000 animate-pulse" />
+                <div className="relative w-36 h-36 mx-auto rounded-[2.5rem] bg-gradient-to-tr from-[#1a1a20] to-[#2a2a35] flex items-center justify-center border border-white/10 shadow-inner group-hover:scale-110 transition-transform duration-700">
+                  <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-tr from-primary/20 to-transparent opacity-50" />
+                  <Crown className="h-20 w-20 text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-bounce-slow" />
+                </div>
+              </div>
+
+              {/* Title & Description with Depth */}
+              <div className="space-y-6 [transform:translateZ(50px)]">
+                <h1 className="text-7xl font-black tracking-[-0.05em] text-white leading-none">
+                  BILLVYAPAR<span className="text-primary italic">.</span>
+                </h1>
+                <div className="h-px w-24 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto opacity-50" />
+                <p className="text-slate-400 font-medium text-2xl max-w-md mx-auto leading-relaxed tracking-tight">
+                  Your <span className="text-white font-bold">digital command center</span> is prepared. Enter the workspace to begin operation.
+                </p>
+              </div>
+
+              {/* Major "Launch" Action */}
+              <div className="pt-6 [transform:translateZ(80px)]">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsOpening(true);
+                    setTimeout(() => {
+                      navigate('/profiles');
+                    }, 1000);
+                  }}
+                  className="group relative w-full overflow-hidden rounded-3xl p-[2px] transition-all duration-500 hover:scale-[1.03] active:scale-95 shadow-2xl shadow-primary/20"
+                >
+                  {/* Glowing border effect */}
+                  <div className="absolute inset-[-1000%] animate-[spin_4s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#2563eb_0%,#3b82f6_25%,#6366f1_50%,#3b82f6_75%,#2563eb_100%)]" />
+                  
+                  <div className="relative flex h-20 w-full items-center justify-center rounded-3xl bg-[#0a0a0f] px-12 transition-all duration-300 group-hover:bg-transparent">
+                    <span className="text-white font-black text-xl tracking-[0.3em] uppercase flex items-center justify-center gap-4 group-hover:scale-110 transition-transform duration-300">
+                      Access System <ArrowUpRight className="h-6 w-6 group-hover:translate-x-2 group-hover:-translate-y-2 transition-transform duration-500" />
+                    </span>
+                  </div>
+                </button>
+
+                <div className="mt-12 flex justify-center items-center gap-10 opacity-40 hover:opacity-100 transition-opacity">
+                  <div className="text-[11px] font-black text-white uppercase tracking-[0.4em] flex items-center gap-3">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    Live Link
+                  </div>
+                  <div className="h-1 w-1 rounded-full bg-white/20" />
+                  <div className="text-[11px] font-black text-white uppercase tracking-[0.4em] flex items-center gap-3">
+                    <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75 animation-delay-500"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
+                    Encrypted
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Subtle light sweep animation */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[4rem]">
+              <div className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-[1500ms] ease-in-out bg-gradient-to-r from-transparent via-white/[0.05] to-transparent skew-x-[-20deg]" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Original UI for Mobile App (isNative)
   return (
-    <div className="min-h-full font-sans">
+    <div className="min-h-full font-sans bg-[#0a0a0c]">
       <div className="p-6 max-w-5xl mx-auto space-y-12">
         <header className="text-center space-y-6 pt-8">
           <div className="relative inline-block">
@@ -161,7 +264,7 @@ export function WelcomePage() {
           
           <div className="space-y-2">
             <h1 className="text-4xl font-black tracking-tight text-primary">BILLVYAPAR<span className="text-emerald-500">.</span></h1>
-            <p className="text-muted-foreground font-medium text-lg">
+            <p className="text-muted-foreground font-medium text-lg text-slate-400">
               {isActive
                 ? 'Strategic Command: Subscription Operational'
                 : 'Initialize Your Enterprise Protocol'}

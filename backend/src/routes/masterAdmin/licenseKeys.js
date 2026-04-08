@@ -100,7 +100,12 @@ masterAdminLicenseKeysRouter.post('/', async (req, res, next) => {
 
       if (canSendEmail()) {
         try {
-          await sendEmail({ to: assignedEmail, subject: 'Your BillVyapar License Key', html });
+          await sendEmail({
+            to: assignedEmail,
+            subject: 'Your BillVyapar License Key',
+            html,
+            text: `Hello,\n\nYour license key for BillVyapar is: ${key}\n\nValid for ${durationDays} days after activation. To activate, open BillVyapar > Subscription > Enter License Key.`,
+          });
         } catch (e) {
           console.error('[LicenseKey] Email send failed:', e);
         }

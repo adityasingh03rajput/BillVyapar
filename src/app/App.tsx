@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import React from 'react';
-import { createBrowserRouter, createHashRouter, RouterProvider, Outlet, Navigate } from 'react-router';
+import { createBrowserRouter, createHashRouter, RouterProvider, Outlet, Navigate, useLocation } from 'react-router';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TourProvider } from './contexts/TourContext';
@@ -65,8 +65,9 @@ function wrap(Component: React.ComponentType) {
 
 /** Persistent layout — never unmounts during navigation, preloads top routes on idle */
 function LayoutRoute() {
-  const { isEmployee, sessionKey } = useAuth();
+  const { isEmployee, sessionKey, profiles, loading } = useAuth();
   const { profileId } = useCurrentProfile();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (!isEmployee) {
@@ -76,6 +77,13 @@ function LayoutRoute() {
 
   if (isEmployee) {
     return <Navigate to="/employee/attendance" replace />;
+  }
+
+  // If user has no profiles, they MUST stay on /profiles or /welcome
+  // We check !loading to ensure we have the profiles list from AuthContext
+  const hasNoProfiles = !isEmployee && Array.isArray(profiles) && profiles.length === 0;
+  if (!loading && hasNoProfiles && pathname !== '/profiles') {
+    return <Navigate to="/profiles" replace />;
   }
 
   return (
@@ -98,7 +106,7 @@ function buildRouter() {
       element: <LayoutRoute />,
       children: [
         { path: "/profiles",            element: wrap(ProfilesPageWrapper) },
-        { path: "/welcome",             element: wrap(WelcomePageWrapper) },
+        { path: "/welcome",             element: <Navigate to="/profiles" replace /> },
         { path: "/dashboard",           element: wrap(DashboardPageWrapper) },
         { path: "/documents",           element: wrap(DocumentsPageWrapper) },
         { path: "/documents/create",    element: wrap(CreateDocumentPageWrapper) },

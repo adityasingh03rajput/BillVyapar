@@ -58,7 +58,7 @@ export function AuthPage() {
       const raw = localStorage.getItem('currentProfile');
       if (raw) { const p = typeof raw === 'string' ? JSON.parse(raw) : raw; if (p?.id) { navigate('/dashboard', { replace: true }); return; } }
     } catch {}
-    navigate('/welcome', { replace: true });
+    navigate('/profiles', { replace: true });
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
@@ -142,7 +142,7 @@ export function AuthPage() {
         const digits = phone.replace(/\D/g, '');
         await signUp(email, password, name, `${phoneCountryCode}${digits}`);
         toast.success('Account created successfully!');
-        navigate('/welcome', { replace: true }); return;
+        navigate('/profiles', { replace: true }); return;
       }
       await signIn(email, password);
       toast.success('Signed in successfully!');
@@ -157,7 +157,7 @@ export function AuthPage() {
         const profiles = await res.json();
         if (Array.isArray(profiles) && profiles.length > 0) { localStorage.setItem('currentProfile', JSON.stringify(profiles[0])); navigate('/dashboard', { replace: true }); return; }
       } catch {}
-      navigate('/welcome', { replace: true });
+      navigate('/profiles', { replace: true });
     } catch (err: any) {
       if (err?.code === 'ALREADY_LOGGED_IN_ANOTHER_DEVICE') { toast.error('Already opened on another device. Reset password to continue.'); setMode('forgot'); }
       else toast.error(err.message || 'Authentication failed');

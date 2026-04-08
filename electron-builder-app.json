@@ -1,6 +1,7 @@
 {
   "appId": "com.billvyapar.app",
   "productName": "BillVyapar",
+  "compression": "normal",
   "directories": {
     "output": "release/billvyapar",
     "buildResources": "build"

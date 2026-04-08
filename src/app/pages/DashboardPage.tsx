@@ -206,8 +206,8 @@ export function DashboardPage() {
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
-                <div className="p-2 text-[10px] text-muted-foreground text-center">
-                  vv1.0.1 - Premium Edition
+                <div className="p-2 text-[10px] text-muted-foreground text-center" data-tour-id="app-version">
+                  V1 - Premium Edition
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -246,7 +246,7 @@ export function DashboardPage() {
             <CardContent className="py-6">
               <div className="text-center max-w-2xl mx-auto">
                 <h2 className="text-2xl font-bold text-foreground mb-2">
-                  Welcome to BillVyapar vv1.0.1! 🎉
+                  Welcome to BillVyapar V1! 🎉
                 </h2>
                 <p className="text-foreground/80 mb-4">
                   Your complete business documentation and billing ecosystem is ready. 

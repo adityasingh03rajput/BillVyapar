@@ -331,7 +331,7 @@ export function MobileLayout({ children, subscriptionWarning, subscriptionExpire
                 textTransform: 'uppercase', opacity: 0.9 }}>Enterprise</span>
               <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#4f46e5' }} />
               <span style={{ fontSize: 9, fontWeight: 800, color: '#a5b4fc', letterSpacing: '0.15em',
-                textTransform: 'uppercase', opacity: 0.7 }}>HQ vv1.0.1</span>
+                textTransform: 'uppercase', opacity: 0.7 }}>HQ vv1.0.0</span>
             </div>
           </div>
         </div>

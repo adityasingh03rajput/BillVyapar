@@ -65,7 +65,7 @@ export function ProfilesPage() {
   const [editFormData, setEditFormData] = useState<Partial<BusinessProfile>>({});
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
   const [profileUpiQrMap, setProfileUpiQrMap] = useState<Record<string, string>>({});
-  const { user, accessToken, deviceId, signOut } = useAuth();
+  const { user, accessToken, deviceId, signOut, reloadProfiles } = useAuth();
   const navigate = useNavigate();
 
   const apiUrl = API_URL;
@@ -235,6 +235,7 @@ export function ProfilesPage() {
       } else {
         toast.success('Profile created successfully!');
         setProfiles([...profiles, data]);
+        await reloadProfiles();
         setShowCreateDialog(false);
         setFormData({});
       }

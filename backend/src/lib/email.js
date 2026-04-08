@@ -13,7 +13,7 @@ function resolveFrom() {
   return String(process.env.EMAIL_FROM || process.env.RESEND_FROM || process.env.SMTP_FROM || '').trim();
 }
 
-async function sendViaResend({ to, subject, html }) {
+async function sendViaResend({ to, subject, html, text }) {
   const key = String(process.env.RESEND_API_KEY || '').trim();
   if (!key) throw new Error('RESEND_API_KEY is not configured');
   const from = resolveFrom();
@@ -21,14 +21,18 @@ async function sendViaResend({ to, subject, html }) {
 
   const resend = new Resend(key);
   await resend.emails.send({
-    from,
+    from: `BillVyapar <${from}>`,
     to,
     subject,
     html,
+    text: text || undefined,
+    headers: {
+      'X-Entity-Ref-ID': `${to}-${Date.now()}`,
+    },
   });
 }
 
-async function sendViaSmtp({ to, subject, html }) {
+async function sendViaSmtp({ to, subject, html, text }) {
   const from = resolveFrom() || String(process.env.SMTP_USER || '').trim();
   if (!from) throw new Error('SMTP_FROM/EMAIL_FROM is not configured');
 
@@ -47,10 +51,14 @@ async function sendViaSmtp({ to, subject, html }) {
   });
 
   await transporter.sendMail({
-    from,
+    from: `BillVyapar <${from}>`,
     to,
     subject,
     html,
+    text: text || undefined,
+    headers: {
+      'X-Entity-Ref-ID': `${to}-${Date.now()}`,
+    },
   });
 }
 
@@ -58,8 +66,8 @@ export function canSendEmail() {
   return canSendResend() || canSendSmtp();
 }
 
-export async function sendEmail({ to, subject, html }) {
-  if (canSendResend()) return sendViaResend({ to, subject, html });
-  if (canSendSmtp()) return sendViaSmtp({ to, subject, html });
+export async function sendEmail({ to, subject, html, text }) {
+  if (canSendResend()) return sendViaResend({ to, subject, html, text });
+  if (canSendSmtp()) return sendViaSmtp({ to, subject, html, text });
   throw new Error('Email provider is not configured');
 }

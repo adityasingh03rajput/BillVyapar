@@ -10,10 +10,12 @@ public class MainActivity extends BridgeActivity {
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
+    registerPlugin(TrackingPlugin.class);
     super.onCreate(savedInstanceState);
 
     // Tune the underlying WebView for maximum touch/scroll smoothness
     WebView webView = getBridge().getWebView();
+
 
     if (webView != null) {
       WebSettings settings = webView.getSettings();

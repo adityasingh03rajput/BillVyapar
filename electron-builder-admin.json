@@ -1,6 +1,7 @@
 {
   "appId": "com.billvyapar.admin",
   "productName": "BillVyapar Admin",
+  "compression": "normal",
   "directories": {
     "output": "release/admin",
     "buildResources": "build"

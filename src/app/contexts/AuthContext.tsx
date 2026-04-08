@@ -20,7 +20,9 @@ interface AuthContextType {
   loading: boolean;
   subscriptionExpired: boolean;
   isEmployee: boolean;
-  sessionKey: number; // increments on every sign-in/sign-out — use as React key to force remount
+  sessionKey: number; 
+  profiles: any[];
+  reloadProfiles: () => Promise<void>;
   setSubscriptionExpired: (v: boolean) => void;
   signIn: (email: string, password: string) => Promise<void>;
   signInAsEmployee: (email: string, password: string) => Promise<void>;
@@ -53,8 +55,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   // loading is false immediately — we read from localStorage synchronously above
   const [loading, setLoading] = useState(false);
-
+  const [profiles, setProfiles] = useState<any[]>([]);
   const apiUrl = API_URL;
+
+  const reloadProfiles = async () => {
+    if (!accessToken || isEmployee) return;
+    try {
+      const res = await fetch(`${apiUrl}/profiles`, {
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'X-Device-ID': deviceId }
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) setProfiles(data);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    if (accessToken && !isEmployee) reloadProfiles();
+    else setProfiles([]);
+  }, [accessToken, isEmployee]);
 
   // Global fetch interceptor — handles 402 subscription expiry + profile ID remapping
   useEffect(() => {
@@ -204,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearApiCache();
     // Increment sessionKey to force-remount all pages (wipes all React state)
     setSessionKey(k => k + 1);
+    await reloadProfiles();
     // Signal all pages to clear their local state (prevents stale data flash)
     window.dispatchEvent(new CustomEvent('appSignIn', { detail: { userId: userData.id } }));
 
@@ -285,7 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, deviceId, loading, subscriptionExpired, setSubscriptionExpired, signIn, signInAsEmployee, signUp, signOut, isEmployee, sessionKey }}>
+    <AuthContext.Provider value={{ user, accessToken, deviceId, loading, subscriptionExpired, setSubscriptionExpired, signIn, signInAsEmployee, signUp, signOut, isEmployee, sessionKey, profiles, reloadProfiles }}>
       {children}
     </AuthContext.Provider>
   );

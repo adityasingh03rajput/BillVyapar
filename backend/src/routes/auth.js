@@ -241,12 +241,9 @@ authRouter.post('/forgot-password', async (req, res, next) => {
       <table width="100%" style="max-width:480px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.08);">
         <!-- Header -->
         <tr>
-          <td style="background:linear-gradient(135deg,#3b6ef5,#5585ff);padding:32px 40px;text-align:center;">
-            <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
-              <span style="font-size:28px;">🔐</span>
-            </div>
-            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;">Password Reset OTP</h1>
-            <p style="margin:6px 0 0;color:rgba(255,255,255,0.8);font-size:13px;">BillVyapar · Secure Verification</p>
+          <td style="background:#3b6ef5;padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">Password Reset OTP</h1>
+            <p style="margin:6px 0 0;color:#ffffff;font-size:13px;opacity:0.8;">BillVyapar · Secure Verification</p>
           </td>
         </tr>
         <!-- Body -->
@@ -257,9 +254,9 @@ authRouter.post('/forgot-password', async (req, res, next) => {
               Use the OTP below to proceed.
             </p>
             <!-- OTP Box -->
-            <div style="background:#f0f4ff;border:2px dashed #3b6ef5;border-radius:10px;padding:24px;text-align:center;margin:0 0 24px;">
-              <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#6b7280;">Your OTP</p>
-              <span style="font-size:42px;font-weight:800;letter-spacing:10px;color:#1e3a8a;font-family:monospace;">${otp}</span>
+            <div style="background:#f0f4ff;border:1px solid #3b6ef5;border-radius:10px;padding:24px;text-align:center;margin:0 0 24px;">
+              <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#6b7280;">Security Verification Code</p>
+              <span style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1e3a8a;font-family:monospace;">${otp}</span>
             </div>
             <p style="margin:0 0 8px;color:#6b7280;font-size:13px;text-align:center;">
               ⏱ Valid for <strong>10 minutes</strong>
@@ -289,6 +286,7 @@ authRouter.post('/forgot-password', async (req, res, next) => {
             to: user.email,
             subject: 'BillVyapar — Your Password Reset OTP',
             html,
+            text: `BillVyapar Password Reset\n\nYour OTP is: ${otp}\n\nValid for 10 minutes. Do not share this OTP with anyone.`,
           });
           // eslint-disable-next-line no-console
           console.log(`[OTP] Email sent successfully to ${user.email}`);

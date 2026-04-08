@@ -91,7 +91,7 @@ function createWindow() {
               type: 'info',
               title: 'About MasterAdmin',
               message: 'MasterAdmin - BillBuddy24',
-              detail: 'Version vv1.0.1\nMulti-tenant management system'
+              detail: 'Version vv1.0.0\nMulti-tenant management system'
             });
           }
         }

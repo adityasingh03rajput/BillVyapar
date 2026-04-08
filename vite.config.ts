@@ -43,6 +43,14 @@ export default defineConfig({
         };
       },
     },
+    // Emergency Fix: Remove 'crossorigin' attribute from bundle tags.
+    // On Android WebView (file://), it causes CSS loads to fail due to CORS.
+    {
+      name: 'remove-crossorigin',
+      transformIndexHtml(html) {
+        return html.replace(/crossorigin/g, '');
+      },
+    },
   ],
 
   resolve: {
@@ -52,15 +60,15 @@ export default defineConfig({
   },
 
   assetsInclude: ['**/*.svg', '**/*.csv'],
-  base: process.env.ELECTRON === 'true' ? './' : '/',
+  base: (process.env.ELECTRON === 'true' || process.env.NATIVE === 'true') ? './' : '/',
 
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     target: 'es2020',
-    assetsInlineLimit: 4096,
-    cssCodeSplit: true,
-    chunkSizeWarningLimit: 1200,
+    assetsInlineLimit: 10000,
+    cssCodeSplit: false,
+    chunkSizeWarningLimit: 2000,
     modulePreload: { polyfill: true },
     minify: 'terser',
     terserOptions: {
