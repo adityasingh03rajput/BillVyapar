@@ -8,6 +8,16 @@ import { Server as SocketIOServer } from "socket.io";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
+import https from "https";
+
+// ── Keep-Alive Ping (Prevent server sleep during inactivity) ────────────────
+const APP_URL = process.env.VITE_API_URL || "https://billvyapar-backend.fly.dev";
+setInterval(() => {
+  https.get(`${APP_URL}/health`, (res) => {
+    // console.log(`[Keep-Alive] Ping result: ${res.statusCode}`);
+  }).on('error', () => { /* ignore */ });
+}, 10 * 60 * 1000); // 10 minutes
+
 
 // Patch all async route errors to be forwarded to Express error handler
 import "express-async-errors";
