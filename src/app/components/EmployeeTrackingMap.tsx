@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { API_URL } from "../config/api";
 import { useAuth } from "../contexts/AuthContext";
-import { animateMarker, predictNext, bearing, encodeDigiPin, type LatLng } from "../utils/markerAnimation";
+import { animateMarker, encodeDigiPin, type LatLng } from "../utils/markerAnimation";
 
 interface LiveEmployee {
   employeeId: string;
@@ -32,7 +32,6 @@ const GOOGLE_MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ?? ""
 // 45s stale threshold: native service posts every 15s, but Doze/network can add
 // 10-20s of delay. 20s was too tight — employees kept flipping to stale between pings.
 const STALE_THRESHOLD_MS = 45_000;
-const DR_INTERVAL_MS     = 1_000;   // dead-reckoning update cadence
 
 function loadGoogleMaps(): Promise<void> {
   return new Promise((resolve) => {
@@ -74,7 +73,6 @@ export function EmployeeTrackingMap({ profileId }: { profileId?: string | null }
   const infoWindowRef   = useRef<any>(null);
   const socketRef       = useRef<Socket | null>(null);
   const drTimerRef      = useRef<number | null>(null);
-
   const [employees, setEmployees] = useState<Map<string, LiveEmployee>>(new Map());
   const [staleSet,  setStaleSet]  = useState<Set<string>>(new Set());  // IDs considered stale
   const [mapReady,  setMapReady]  = useState(false);
@@ -385,32 +383,9 @@ export function EmployeeTrackingMap({ profileId }: { profileId?: string | null }
     });
   }, [employees, staleSet, mapReady]);
 
-  // ── Dead reckoning: if no update for 5-10s, extrapolate position ──────────
-  useEffect(() => {
-    if (drTimerRef.current) clearInterval(drTimerRef.current);
-    drTimerRef.current = window.setInterval(() => {
-      const map     = mapInstanceRef.current;
-      const markers = markersRef.current;
-      if (!map) return;
-
-      employees.forEach((emp) => {
-        const sinceMs = Date.now() - new Date(emp.updatedAt).getTime();
-        if (sinceMs < 5000 || sinceMs > 10000) return;   // only 5–10s window
-        if (!emp.prevLat || !emp.prevLng) return;
-
-        const from: LatLng = { lat: emp.prevLat, lng: emp.prevLng };
-        const to:   LatLng = { lat: emp.lat,     lng: emp.lng };
-        const b     = bearing(from, to);
-        const speed = haversineM(from, to) / Math.max(1, sinceMs); // m/ms
-
-        const predicted = predictNext(to, speed, b, sinceMs - 5000);
-        const m = markers.get(emp.employeeId);
-        if (m) m.setPosition({ lat: predicted.lat, lng: predicted.lng });
-      });
-    }, DR_INTERVAL_MS) as unknown as number;
-
-    return () => { if (drTimerRef.current) clearInterval(drTimerRef.current); };
-  }, [employees]);
+  // Dead reckoning removed — it was extrapolating GPS jitter between stationary
+  // pings as real movement, displacing the marker by 50–100m. The 15s native
+  // GPS interval is accurate enough without extrapolation.
 
   // ── Apply map type changes ──────────────────────────────────────────────────
   useEffect(() => {
