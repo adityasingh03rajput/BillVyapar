@@ -31,8 +31,17 @@ export function animateMarker(
 
   // Skip animation if distance is negligible — avoids jitter on stationary pings
   const dist = haversineM(start, end);
+
+  const updatePos = (pos: LatLng) => {
+    if (typeof marker.setPosition === 'function') {
+      marker.setPosition(pos);
+    } else {
+      marker.position = pos;
+    }
+  };
+
   if (dist < 1) {
-    marker.setPosition(end);
+    updatePos(end);
     return () => {};
   }
 
@@ -40,7 +49,7 @@ export function animateMarker(
     if (cancelled) return;
     const progress = Math.min((now - startTime) / durationMs, 1);
     const ease = easeOutCubic(progress);
-    marker.setPosition({
+    updatePos({
       lat: start.lat + (end.lat - start.lat) * ease,
       lng: start.lng + (end.lng - start.lng) * ease,
     });
@@ -53,7 +62,7 @@ export function animateMarker(
   return () => {
     cancelled = true;
     if (rafId !== null) cancelAnimationFrame(rafId);
-    marker.setPosition(end);
+    updatePos(end);
   };
 }
 
