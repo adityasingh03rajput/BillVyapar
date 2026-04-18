@@ -11,12 +11,13 @@ dotenv.config({ path: path.join(__dirname, "..", ".env") });
 import https from "https";
 
 // ── Keep-Alive Ping (Prevent server sleep during inactivity) ────────────────
-const APP_URL = process.env.VITE_API_URL || "https://billvyapar-backend.fly.dev";
-setInterval(() => {
-  https.get(`${APP_URL}/health`, (res) => {
-    // console.log(`[Keep-Alive] Ping result: ${res.statusCode}`);
-  }).on('error', () => { /* ignore */ });
-}, 10 * 60 * 1000); // 10 minutes
+// APP_URL must be set via environment variable — never hardcode the production URL here.
+const APP_URL = process.env.APP_URL || process.env.VITE_API_URL;
+if (APP_URL) {
+  setInterval(() => {
+    https.get(`${APP_URL}/health`, () => {}).on('error', () => { /* ignore */ });
+  }, 10 * 60 * 1000); // 10 minutes
+}
 
 
 // Patch all async route errors to be forwarded to Express error handler
@@ -465,65 +466,99 @@ const runAutoReminders = async () => {
 const httpServer = createServer(app);
 
 // ── Socket.io for real-time employee location tracking ────────────────────────
+// ── Flaw #18 fix: restrict Socket.io CORS to the same allowed origins as HTTP ─
+const socketCorsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
+  : [];
+// Always allow the production domain and Capacitor
+socketCorsOrigins.push(
+  'https://www.billvyapar.com',
+  'https://billvyapar.com',
+  'capacitor://localhost',
+  'http://localhost',
+  'https://localhost'
+);
+
 const io = new SocketIOServer(httpServer, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
-  path: "/socket.io",
+  cors: {
+    origin: socketCorsOrigins,
+    methods: ['GET', 'POST'],
+    credentials: false,
+  },
+  path: '/socket.io',
 });
-app.set("io", io);
+app.set('io', io);
 
-io.on("connection", (socket) => {
-  // ── Owner: joins their room to receive all employee location updates ──────
-  socket.on("join-owner", (ownerUserId) => {
-    if (ownerUserId) {
-      socket.join(`owner:${ownerUserId}`);
-      console.log(`[socket] owner ${ownerUserId} joined room`);
-    }
+// ── Flaw #2 fix: authenticate socket connections with JWT ─────────────────────
+// Derive identity from the verified token — never trust client-supplied IDs.
+import { verifyAccessToken } from './lib/jwt.js';
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+  if (!token) return next(new Error('Authentication required'));
+  try {
+    const payload = verifyAccessToken(token);
+    socket.userId   = payload.sub;
+    socket.userType = payload.user?.userType ?? 'owner'; // 'owner' | 'employee'
+    socket.ownerUserId = payload.user?.ownerUserId ?? payload.sub; // for employees
+    next();
+  } catch {
+    next(new Error('Invalid token'));
+  }
+});
+
+io.on('connection', (socket) => {
+  // ── Owner: joins their room — userId derived from verified JWT ───────────
+  socket.on('join-owner', () => {
+    if (socket.userType !== 'owner') return; // employees cannot join owner rooms
+    socket.join(`owner:${socket.userId}`);
+    console.log(`[socket] owner ${socket.userId} joined room`);
   });
 
-  // ── Employee: announces check-in, joins their own room ───────────────────
-  socket.on("employee-join", ({ employeeId, ownerUserId }) => {
-    if (!employeeId || !ownerUserId) return;
-    socket.join(`employee:${employeeId}`);
-    socket.data.employeeId = employeeId;
-    socket.data.ownerUserId = ownerUserId;
-    // Notify owner that this employee is now live
-    io.to(`owner:${ownerUserId}`).emit("employee-online", {
-      employeeId,
-      online: true,
-    });
-    console.log(
-      `[socket] employee ${employeeId} joined room (owner: ${ownerUserId})`
-    );
+  // ── Employee: announces check-in — identity from JWT, not client payload ─
+  socket.on('employee-join', ({ ownerUserId } = {}) => {
+    if (socket.userType !== 'employee') return;
+    const empId   = socket.userId;                          // from JWT
+    const ownerId = socket.ownerUserId;                     // from JWT
+    socket.join(`employee:${empId}`);
+    socket.data.employeeId  = empId;
+    socket.data.ownerUserId = ownerId;
+    io.to(`owner:${ownerId}`).emit('employee-online', { employeeId: empId, online: true });
+    console.log(`[socket] employee ${empId} joined room (owner: ${ownerId})`);
   });
 
-  // ── Employee: streams live GPS position ──────────────────────────────────
-  socket.on("employee-location", (data) => {
-    const { employeeId, ownerUserId, name, lat, lng, updatedAt } = data;
-    if (!employeeId || !ownerUserId || lat == null || lng == null) return;
+  // ── Employee: streams live GPS — ownerUserId from JWT, not payload ───────
+  socket.on('employee-location', (data) => {
+    if (socket.userType !== 'employee') return; // owners cannot emit locations
+    const { lat, lng, name, updatedAt, speed, heading, accuracy } = data;
+    const empId   = socket.userId;       // from JWT
+    const ownerId = socket.ownerUserId;  // from JWT
+    if (lat == null || lng == null) return;
 
-    console.log(
-      `[socket] location from ${
-        name ?? employeeId
-      }: ${lat}, ${lng} → room owner:${ownerUserId}`
-    );
+    console.log(`[socket] location from ${name ?? empId}: ${lat}, ${lng} → room owner:${ownerId}`);
 
-    // Relay to owner's room in real-time
-    io.to(`owner:${ownerUserId}`).emit("employee-location", {
-      employeeId,
-      name,
-      lat,
-      lng,
+    io.to(`owner:${ownerId}`).emit('employee-location', {
+      employeeId: empId, name, lat, lng,
+      speed: speed ?? null,
+      heading: heading ?? null,
+      accuracy: accuracy ?? null,
       updatedAt,
     });
 
     // Persist to DB + accumulate km (fire-and-forget)
-    import("./models/Attendance.js").then(({ Attendance }) => {
-      const today = new Date().toLocaleDateString("en-CA", {
-        timeZone: "Asia/Kolkata",
-      });
-      const newPt = { lat, lng, ts: new Date(updatedAt) };
+    import('./models/Attendance.js').then(({ Attendance }) => {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const newPt = {
+        lat, lng,
+        ts: new Date(updatedAt),
+        speed: speed ?? null,
+        heading: heading ?? null,
+        accuracy: accuracy ?? null,
+      };
+      const MIN_GPS_MOVEMENT_KM = 0.020; // unified 20m threshold (Flaw #8 fix)
+      const MAX_GPS_JUMP_KM = 1;
 
-      Attendance.findOne({ employeeId, date: today })
+      Attendance.findOne({ employeeId: empId, date: today })
         .then((record) => {
           if (!record) return;
           const hist = record.locationHistory || [];
@@ -533,22 +568,22 @@ io.on("connection", (socket) => {
             const R = 6371;
             const dLat = ((lat - last.lat) * Math.PI) / 180;
             const dLng = ((lng - last.lng) * Math.PI) / 180;
-            const a =
-              Math.sin(dLat / 2) ** 2 +
-              Math.cos((last.lat * Math.PI) / 180) *
-                Math.cos((lat * Math.PI) / 180) *
-                Math.sin(dLng / 2) ** 2;
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos((last.lat * Math.PI) / 180) * Math.cos((lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
             addedKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            if (addedKm < 0.005 || addedKm > 1) addedKm = 0;
+            if (addedKm < MIN_GPS_MOVEMENT_KM || addedKm > MAX_GPS_JUMP_KM) addedKm = 0;
           }
-          // Cap locationHistory at 240 points (~8hr shift at 120s intervals, ~12KB/employee/day)
-          // Use $slice to keep only the latest 240 points — prevents unbounded array growth
-          const MAX_LOCATION_POINTS = 240;
+          const MAX_LOCATION_POINTS = 480; // ~8hr shift at 60s intervals
           Attendance.findByIdAndUpdate(record._id, {
-            $set: { lastLocation: { lat, lng, updatedAt: newPt.ts } },
-            $push: {
-              locationHistory: { $each: [newPt], $slice: -MAX_LOCATION_POINTS },
+            $set: {
+              lastLocation: {
+                lat, lng,
+                updatedAt: newPt.ts,
+                speed: speed ?? null,
+                heading: heading ?? null,
+                accuracy: accuracy ?? null,
+              },
             },
+            $push: { locationHistory: { $each: [newPt], $slice: -MAX_LOCATION_POINTS } },
             $inc: { totalKm: addedKm },
           }).catch(() => {});
         })
@@ -557,13 +592,10 @@ io.on("connection", (socket) => {
   });
 
   // ── Cleanup on disconnect ────────────────────────────────────────────────
-  socket.on("disconnect", () => {
+  socket.on('disconnect', () => {
     const { employeeId, ownerUserId } = socket.data;
     if (employeeId && ownerUserId) {
-      io.to(`owner:${ownerUserId}`).emit("employee-online", {
-        employeeId,
-        online: false,
-      });
+      io.to(`owner:${ownerUserId}`).emit('employee-online', { employeeId, online: false });
       console.log(`[socket] employee ${employeeId} disconnected`);
     }
   });

@@ -1,9 +1,13 @@
 import mongoose from 'mongoose';
 
+// ── Enhanced location point — stores speed, heading, accuracy for analytics ──
 const locationPointSchema = new mongoose.Schema({
-  lat: Number,
-  lng: Number,
-  ts:  { type: Date, default: Date.now },
+  lat:      Number,
+  lng:      Number,
+  ts:       { type: Date, default: Date.now },
+  speed:    { type: Number, default: null },   // m/s
+  heading:  { type: Number, default: null },   // degrees 0-360
+  accuracy: { type: Number, default: null },   // metres
 }, { _id: false });
 
 const taskSchema = new mongoose.Schema({
@@ -65,11 +69,14 @@ const attendanceSchema = new mongoose.Schema(
     },
     checkOutAddress: { type: String, default: null },
 
-    // Last known live location
+    // Last known live location — includes speed/heading for live map display
     lastLocation: {
       lat:       { type: Number, default: null },
       lng:       { type: Number, default: null },
       updatedAt: { type: Date,   default: null },
+      speed:     { type: Number, default: null },   // m/s at last ping
+      heading:   { type: Number, default: null },   // degrees 0-360
+      accuracy:  { type: Number, default: null },   // metres
     },
 
     // Full GPS trail for km calculation (sampled every ~30s via socket)

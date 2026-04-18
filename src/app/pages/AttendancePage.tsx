@@ -9,6 +9,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { TraceLoader } from '../components/TraceLoader';
 import { EmployeeTrackingMap } from '../components/EmployeeTrackingMap';
 import { DateRangePicker, DateRange } from '../components/ui/date-range-picker';
+import { haversineM } from '../utils/markerAnimation';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -175,13 +176,11 @@ function AddTaskModal({ recordId, onClose, onSaved, headers }: {
         const { latitude: lat, longitude: lng } = pos.coords;
         setForm((f) => ({ ...f, locLat: String(lat), locLng: String(lng) }));
         try {
-          const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=16`, {
-            headers: { 'User-Agent': 'BillVyapar/1.0' },
+          const r = await fetch(`${API_URL}/geocode?lat=${lat}&lng=${lng}`, {
+            headers,
           });
           const d = await r.json();
-          const a = d.address || {};
-          const addr = [a.road || a.pedestrian, a.suburb || a.neighbourhood || a.village, a.city || a.county, a.state].filter(Boolean).join(', ');
-          setForm((f) => ({ ...f, locAddress: addr || d.display_name?.split(',').slice(0, 3).join(',') || '' }));
+          if (d?.address) setForm((f) => ({ ...f, locAddress: d.address }));
         } catch { /* ignore */ }
         setGeoLoading(false);
       },
@@ -808,12 +807,4 @@ export function AttendancePage() {
   );
 }
 
-/** Haversine in meters */
-function haversineM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const R = 6371000;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const x = Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-}
+// haversineM is imported from ../utils/markerAnimation

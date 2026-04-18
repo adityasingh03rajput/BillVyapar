@@ -73,11 +73,11 @@ export function ProjectsPage() {
   // Gemini Smart State
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
-  const [addrSuggestions, setAddrSuggestions] = useState<string[]>([]);
+  const [addrSuggestions, setAddrSuggestions] = useState<{ place_id: string; description: string; main: string; secondary: string; types: string[] }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionTimeoutRef = useRef<number | null>(null);
 
-  const GEMINI_KEY = (import.meta as any).env?.VITE_GEMINI_KEY || "";
+  // Flaw #5 fix: removed VITE_GEMINI_KEY — use backend Places API proxy instead
 
   const profileId = (() => {
     try {
@@ -193,54 +193,41 @@ export function ProjectsPage() {
     return Math.round((p.tasks.filter(t => t.status === 'done').length / p.tasks.length) * 100);
   };
 
-  // ── Gemini Smart Logic ──
+  // ── Location via Places API proxy (no client-side API keys) ──
   const suggestLocations = async (query: string) => {
-    if (!query || query.length < 3 || !GEMINI_KEY || isSuggesting) return;
+    if (!query || query.length < 2 || isSuggesting) return;
     setIsSuggesting(true);
     try {
-      const prompt = `Return 5 real, existing physical address suggestions (exact strings only, one per line) for a site at: ${query}. Location context: India. No other text. Status: Precise.`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
+      const params = new URLSearchParams({ q: query });
+      const res = await fetch(`${API_URL}/attendance/places/autocomplete?${params}`, { headers });
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const cleaned = text.split('\n').map((s: string) => s.replace(/^\d+\.\s*/, '').replace(/[\*\-]/g, '').trim()).filter((s: string) => s.length > 5);
-      setAddrSuggestions(cleaned);
-      setShowSuggestions(true);
+      if (Array.isArray(data)) { setAddrSuggestions(data); setShowSuggestions(data.length > 0); }
     } catch { /* silent */ }
     finally { setIsSuggesting(false); }
   };
 
-  const smartGeocode = async (address: string) => {
-    if (!address || !GEMINI_KEY || isGeocoding) return;
+  const smartGeocode = async (suggestion: { place_id: string; description: string; main: string }) => {
+    if (!suggestion || isGeocoding) return;
     setIsGeocoding(true);
-    setTaskForm(f => ({ ...f, address }));
+    setTaskForm(f => ({ ...f, address: suggestion.description }));
     setShowSuggestions(false);
     try {
-      const prompt = `Analyze this address: "${address}". Return ONLY a JSON object: {"lat": float, "lng": float}. No talk.`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
+      const res = await fetch(`${API_URL}/attendance/places/details?place_id=${encodeURIComponent(suggestion.place_id)}`, { headers });
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const jsonStr = text.match(/\{[\s\S]*\}/)?.[0];
-      if (jsonStr) {
-        const coords = JSON.parse(jsonStr);
-        setTaskForm(f => ({ ...f, lat: coords.lat, lng: coords.lng }));
-        toast.success("AI Sync: Coordinates locked");
+      if (data.lat && data.lng) {
+        setTaskForm(f => ({ ...f, lat: data.lat, lng: data.lng, address: data.name || suggestion.main || suggestion.description }));
+        toast.success('Coordinates resolved');
+      } else {
+        toast.error('Could not resolve coordinates');
       }
-    } catch { toast.error("AI Sync Failed"); }
+    } catch { toast.error('Location lookup failed'); }
     finally { setIsGeocoding(false); }
   };
 
   const handleAddressChange = (val: string) => {
-    setTaskForm(f => ({ ...f, address: val }));
+    setTaskForm(f => ({ ...f, address: val, lat: undefined, lng: undefined }));
     if (suggestionTimeoutRef.current) window.clearTimeout(suggestionTimeoutRef.current);
-    suggestionTimeoutRef.current = window.setTimeout(() => suggestLocations(val), 1000) as unknown as number;
+    suggestionTimeoutRef.current = window.setTimeout(() => suggestLocations(val), 600) as unknown as number;
   };
 
   return (
@@ -503,22 +490,25 @@ export function ProjectsPage() {
                  <div className="flex items-center justify-between px-1">
                    <Label className="text-[10px] font-black uppercase tracking-widest opacity-50">Site Address</Label>
                  </div>
-                 <Input onFocus={() => setShowSuggestions(true)} onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} placeholder="Search site..." value={taskForm.address || ''} onChange={e => handleAddressChange(e.target.value)} className="rounded-xl h-12 bg-muted/30 border-none" />
+                 <Input onFocus={() => { if (addrSuggestions.length > 0) setShowSuggestions(true); }} onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} placeholder="Search site address..." value={taskForm.address || ''} onChange={e => handleAddressChange(e.target.value)} className="rounded-xl h-12 bg-muted/30 border-none" />
                  
                  {isSuggesting && <Loader2 className="absolute right-3 top-9 h-4 w-4 animate-spin text-indigo-500 opacity-50" />}
 
                  {showSuggestions && addrSuggestions.length > 0 && (
                    <div className="absolute z-[200] left-0 right-0 top-full mt-2 bg-card/80 backdrop-blur-3xl border border-border/40 rounded-2xl shadow-2xl p-2 max-h-48 overflow-y-auto">
                      {addrSuggestions.map((s, i) => (
-                       <button key={i} onClick={() => smartGeocode(s)} className="w-full text-left px-4 py-2.5 rounded-xl hover:bg-indigo-500/10 text-[10px] font-black text-foreground/80 hover:text-indigo-600 uppercase tracking-tight transition-colors border-b border-border/10 last:border-0">{s}</button>
+                       <button key={i} onMouseDown={() => smartGeocode(s)} className="w-full text-left px-4 py-2.5 rounded-xl hover:bg-indigo-500/10 transition-colors border-b border-border/10 last:border-0">
+                         <p className="text-[11px] font-bold text-foreground/80 truncate">{s.main}</p>
+                         <p className="text-[10px] text-muted-foreground truncate">{s.secondary}</p>
+                       </button>
                      ))}
                    </div>
                  )}
               </div>
             </div>
 
-            <Button variant="ghost" className="w-full text-[10px] font-black uppercase h-10 border border-dashed border-indigo-500/20 hover:border-indigo-500/40 hover:text-indigo-600 rounded-xl bg-indigo-500/5 mt-1" onClick={() => smartGeocode(taskForm.address)}>
-              {isGeocoding ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <MapPin className="h-3 w-3 mr-2" />} AI Resolve Site Coordinates
+            <Button variant="ghost" className="w-full text-[10px] font-black uppercase h-10 border border-dashed border-indigo-500/20 hover:border-indigo-500/40 hover:text-indigo-600 rounded-xl bg-indigo-500/5 mt-1" onClick={() => taskForm.address && suggestLocations(taskForm.address)}>
+              {isSuggesting ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <MapPin className="h-3 w-3 mr-2" />} Search Site Coordinates
             </Button>
 
             <div className="grid grid-cols-2 gap-4">

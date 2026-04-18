@@ -3,6 +3,11 @@ primary_region = 'iad'
 
 [build]
 
+[env]
+  # Non-secret public config — secrets go in fly secrets (fly secrets set KEY=value)
+  APP_URL = "https://billvyapar-backend.fly.dev"
+  PORT = "4000"
+
 [http_service]
   internal_port = 4000
   force_https = true

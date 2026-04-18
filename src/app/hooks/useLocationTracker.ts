@@ -5,126 +5,145 @@ import { Motion } from "@capacitor/motion";
 import { Geolocation, Position } from "@capacitor/geolocation";
 import { registerPlugin } from "@capacitor/core";
 import { toast } from "sonner";
+import { haversineM } from "../utils/markerAnimation";
 
-const TrackingService = registerPlugin<any>('TrackingService');
+const TrackingService = registerPlugin<any>("TrackingService");
 
-/**
- * useLocationTracker — High-Reliability Background Tracking Hook
- *
- * ROOT CAUSES FIXED:
- * 1. Race condition: start() is async; socket() was called before socket was assigned.
- *    Fixed by returning the socket from start() and storing employee identity in ref.
- * 2. employee-join was never re-emitted after a reconnect, so the server never relayed
- *    location to the owner room after a background/screen-off cycle.
- *    Fixed by calling employee-join inside socket.on("connect", ...).
- * 3. Stale socket object: the appStateChange handler was calling .connect() on the old
- *    socket reference without re-joining. Fixed with stored employee identity refs.
- */
+// ── Tracking constants ────────────────────────────────────────────────────────
+// MIN_DISTANCE_M: minimum real movement before we emit a ping.
+//   20m = filters GPS drift/jitter indoors while capturing walking movement.
+const MIN_DISTANCE_M = 20;
 
-const MIN_DISTANCE_M = 15;
-const MIN_INTERVAL_MS = 10000;
-const MAX_SPEED_KMH = 150;
-const MAX_ACCURACY_M = 100;
-const STILLNESS_THRESHOLD = 0.22;
-const STILLNESS_GRACE_MS = 30000;
+// MIN_INTERVAL_MS: hard floor between pings regardless of movement.
+//   10s prevents socket flooding when employee is moving fast.
+const MIN_INTERVAL_MS = 10_000;
 
-function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// FORCE_INTERVAL_MS: emit a heartbeat even if stationary, so the owner map
+//   knows the employee is still alive (not just signal-lost).
+const FORCE_INTERVAL_MS = 30_000;
+
+// MAX_SPEED_KMH: discard GPS teleports (satellite glitch, tunnel exit).
+const MAX_SPEED_KMH = 200;
+
+// MAX_ACCURACY_M: discard low-quality fixes (indoors, bad signal).
+//   150m is generous — tighter values cause too many dropped pings in India.
+const MAX_ACCURACY_M = 150;
+
+// STILLNESS_THRESHOLD: accelerometer magnitude below which device is considered still.
+const STILLNESS_THRESHOLD = 0.3;
+const STILLNESS_GRACE_MS = 45_000; // 45s of stillness before suppressing pings
+
+// OFFLINE_BUFFER_MAX: max points to buffer in localStorage when socket is down.
+const OFFLINE_BUFFER_MAX = 100;
+
+interface LocationPayload {
+  name: string;
+  lat: number;
+  lng: number;
+  speed: number | null;   // m/s
+  heading: number | null; // degrees 0-360
+  accuracy: number | null;
+  updatedAt: string;
 }
 
-interface Point {
-  employeeId: string; ownerUserId: string; name: string;
-  lat: number; lng: number; updatedAt: string; ts: number;
+interface BufferedPoint extends LocationPayload {
+  employeeId: string;
+  ownerUserId: string;
+  ts: number;
 }
 
 export function useLocationTracker() {
-  const socketRef = useRef<Socket | null>(null);
-  const watchIdRef = useRef<string | number | null>(null);
-  const appListenerRef = useRef<any>(null);
+  const socketRef        = useRef<Socket | null>(null);
+  const watchIdRef       = useRef<string | number | null>(null);
+  const appListenerRef   = useRef<any>(null);
   const motionListenerRef = useRef<any>(null);
+  const activeRef        = useRef(false);
 
-  const prevRef = useRef<Point | null>(null);
-  const bufferRef = useRef<Point[]>([]);
-  const activeRef = useRef(false);
-
-  // Store employee identity so it can be re-used on socket reconnect
-  const employeeIdRef = useRef<string>("");
+  // Employee identity — stored in refs so reconnect handlers always have fresh values
+  const employeeIdRef  = useRef<string>("");
   const ownerUserIdRef = useRef<string>("");
-  const nameRef = useRef<string>("");
+  const nameRef        = useRef<string>("");
 
-  const lastMotionTs = useRef(Date.now());
-  const isMoving = useRef(true);
+  // Last accepted GPS point — for distance/interval gating
+  const prevRef = useRef<{ lat: number; lng: number; ts: number } | null>(null);
+  // Last emitted timestamp — for force-heartbeat logic
+  const lastEmitTs = useRef<number>(0);
 
+  // Offline buffer
+  const bufferRef = useRef<BufferedPoint[]>([]);
+
+  // Motion sensor state
+  const lastMotionTs  = useRef(Date.now());
+  const isMoving      = useRef(true);
+
+  // ── Flush offline buffer to socket ─────────────────────────────────────────
   const flush = useCallback((socket: Socket) => {
-    const saved = localStorage.getItem('bp_offline_sync');
-    let points: Point[] = [];
+    const saved = localStorage.getItem("bp_offline_sync");
+    let stored: BufferedPoint[] = [];
     if (saved) {
-      try { points = JSON.parse(saved); } catch { points = []; }
-      localStorage.removeItem('bp_offline_sync');
+      try { stored = JSON.parse(saved); } catch { stored = []; }
+      localStorage.removeItem("bp_offline_sync");
     }
-
-    const combined = [...points, ...bufferRef.current.splice(0)];
+    const combined = [...stored, ...bufferRef.current.splice(0)];
     if (!combined.length) return;
 
     if (socket.connected) {
       for (const pt of combined) {
-        socket.emit("employee-location", pt);
+        socket.emit("employee-location", {
+          name: pt.name, lat: pt.lat, lng: pt.lng,
+          speed: pt.speed, heading: pt.heading, accuracy: pt.accuracy,
+          updatedAt: pt.updatedAt,
+        });
       }
     } else {
-      localStorage.setItem('bp_offline_sync', JSON.stringify(combined.slice(-100)));
+      // Still offline — keep the most recent points
+      const merged = [...stored, ...combined].slice(-OFFLINE_BUFFER_MAX);
+      localStorage.setItem("bp_offline_sync", JSON.stringify(merged));
     }
   }, []);
 
-  const start = useCallback(async (employeeId: string, ownerUserId: string, name: string, socketUrl: string): Promise<Socket> => {
+  const start = useCallback(async (
+    employeeId: string,
+    ownerUserId: string,
+    name: string,
+    socketUrl: string,
+  ): Promise<Socket> => {
     if (activeRef.current && socketRef.current) return socketRef.current;
     activeRef.current = true;
 
-    // Store identity for reuse on reconnect
-    employeeIdRef.current = employeeId;
+    employeeIdRef.current  = employeeId;
     ownerUserIdRef.current = ownerUserId;
-    nameRef.current = name;
+    nameRef.current        = name;
 
+    // ── Socket connection ───────────────────────────────────────────────────
     const socket = io(socketUrl, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
       reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 8000,
+      reconnectionAttempts: Infinity,
       timeout: 10000,
+      auth: { token: localStorage.getItem("accessToken") || "" },
     });
     socketRef.current = socket;
 
-    // FIX #2: always re-emit employee-join on every connect / reconnect
-    // This means the server always knows which owner room to relay to,
-    // even after a background socket drop.
     socket.on("connect", () => {
-      console.log("[tracker] socket connected — re-joining room");
-      socket.emit("employee-join", {
-        employeeId: employeeIdRef.current,
-        ownerUserId: ownerUserIdRef.current,
-      });
+      console.log("[tracker] connected — joining room");
+      socket.emit("employee-join", { name: nameRef.current });
       flush(socket);
     });
 
     socket.on("connect_error", (err) => {
-      console.error("[tracker] socket error", err.message);
+      console.warn("[tracker] connect error:", err.message);
     });
 
-    socket.on("disconnect", (reason) => {
-      console.warn("[tracker] socket disconnected:", reason);
-      // socket.io will auto-reconnect; employee-join will be re-emitted on connect
-    });
-
-    // 1. Hardware Sensor Fusion — accelerometer for stillness detection
+    // ── Accelerometer — stillness detection ────────────────────────────────
     try {
       if (motionListenerRef.current) motionListenerRef.current.remove();
-      motionListenerRef.current = await Motion.addListener('accel', (event) => {
+      motionListenerRef.current = await Motion.addListener("accel", (event) => {
         const { x, y, z } = event.acceleration;
-        if (!x || !y || !z) return;
+        if (x == null || y == null || z == null) return;
         const mag = Math.sqrt(x * x + y * y + z * z);
         if (mag > STILLNESS_THRESHOLD) {
           lastMotionTs.current = Date.now();
@@ -133,127 +152,127 @@ export function useLocationTracker() {
           isMoving.current = false;
         }
       });
-    } catch (e) {
-      console.warn("Motion sensor unavailable", e);
-      isMoving.current = true;
+    } catch {
+      isMoving.current = true; // assume moving if sensor unavailable
     }
 
-    const sendData = (lat: number, lng: number, speed: number | null, accuracy?: number) => {
+    // ── Core GPS send function ──────────────────────────────────────────────
+    const sendData = (
+      lat: number,
+      lng: number,
+      speed: number | null,
+      heading: number | null,
+      accuracy: number | null,
+    ) => {
       const now = Date.now();
       const prev = prevRef.current;
 
-      if (!isMoving.current && prev) {
-        const jump = haversineM(prev.lat, prev.lng, lat, lng);
-        if (jump < 30) return;
-      }
+      // 1. Accuracy gate — discard poor fixes
+      if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
 
-      if (accuracy && accuracy > MAX_ACCURACY_M) {
-        console.warn("[tracker] discarded low accuracy ping:", accuracy);
-        return;
-      }
+      // 2. Speed gate — discard GPS teleports
+      if (speed != null && speed * 3.6 > MAX_SPEED_KMH) return;
 
-      if (speed !== null && speed * 3.6 > MAX_SPEED_KMH) return;
-
+      // 3. Distance + interval gate
+      const sinceLastEmit = now - lastEmitTs.current;
       if (prev) {
-        const dist = haversineM(prev.lat, prev.lng, lat, lng);
+        const dist = haversineM({ lat: prev.lat, lng: prev.lng }, { lat, lng });
         const elapsed = now - prev.ts;
-        if (dist < MIN_DISTANCE_M && elapsed < MIN_INTERVAL_MS) return;
+
+        // Suppress if: not enough movement AND not enough time AND not a forced heartbeat
+        const isForced = sinceLastEmit >= FORCE_INTERVAL_MS;
+        if (dist < MIN_DISTANCE_M && elapsed < MIN_INTERVAL_MS && !isForced) return;
+
+        // Suppress stationary pings (accelerometer says still, < 5m movement)
+        if (!isMoving.current && dist < 5 && !isForced) return;
       }
 
-      const payload: Point = {
-        employeeId: employeeIdRef.current,
-        ownerUserId: ownerUserIdRef.current,
+      prevRef.current = { lat, lng, ts: now };
+      lastEmitTs.current = now;
+
+      const payload: LocationPayload = {
         name: nameRef.current,
         lat, lng,
+        speed,
+        heading,
+        accuracy,
         updatedAt: new Date(now).toISOString(),
-        ts: now,
       };
-
-      prevRef.current = payload;
 
       if (socket.connected) {
         socket.emit("employee-location", payload);
       } else {
-        console.log("[tracker] socket offline — buffering to localStorage");
-        bufferRef.current = [...bufferRef.current.slice(-20), payload];
-        localStorage.setItem('bp_offline_sync', JSON.stringify(bufferRef.current));
+        // Buffer for when connection restores
+        const buffered: BufferedPoint = {
+          ...payload,
+          employeeId: employeeIdRef.current,
+          ownerUserId: ownerUserIdRef.current,
+          ts: now,
+        };
+        bufferRef.current = [...bufferRef.current.slice(-(OFFLINE_BUFFER_MAX - 1)), buffered];
+        localStorage.setItem("bp_offline_sync", JSON.stringify(bufferRef.current));
       }
     };
 
-    // 2. Native Geolocation Watcher — only used as fallback on web/non-native
-    // On native Android, the TrackingService (started below) handles GPS via
-    // FusedLocationProviderClient on a background thread. Running BOTH causes
-    // duplicate/conflicting location updates where the WebView's throttled GPS
-    // can override the accurate native readings. So we skip the JS watcher on native.
-    const isNativeAndroid = !!(window as any).Capacitor?.isNativePlatform?.() &&
-      (window as any).Capacitor?.getPlatform?.() === 'android';
+    // ── GPS watcher — web/PWA path (native uses TrackingService below) ──────
+    const isNativeAndroid =
+      !!(window as any).Capacitor?.isNativePlatform?.() &&
+      (window as any).Capacitor?.getPlatform?.() === "android";
 
     if (!isNativeAndroid) {
       try {
-        const check = await Geolocation.requestPermissions();
-        if (check.location !== 'granted') {
-          toast.error("Location Permission Denied. Tracking will NOT work in background.");
+        const perm = await Geolocation.requestPermissions();
+        if (perm.location !== "granted") {
+          toast.error("Location permission denied — tracking disabled.");
         }
 
         watchIdRef.current = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
           (position: Position | null, err: any) => {
             if (err) {
-              console.error("[tracker] GPS error:", err.message || err);
               if (err.message?.includes("denied")) {
-                toast.error("CRITICAL: Set location to 'Allow all the time' in Settings.");
+                toast.error("Set location to 'Allow all the time' in Settings.");
               }
               return;
             }
-            if (position) {
-              sendData(
-                position.coords.latitude,
-                position.coords.longitude,
-                position.coords.speed,
-                position.coords.accuracy
-              );
-            }
-          }
+            if (!position) return;
+            const { latitude, longitude, speed, heading, accuracy } = position.coords;
+            sendData(latitude, longitude, speed ?? null, heading ?? null, accuracy ?? null);
+          },
         );
-      } catch (e) {
-        console.error("[tracker] Geolocation watcher failed:", e);
-        // Web fallback
+      } catch {
+        // Web browser fallback
         watchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => sendData(pos.coords.latitude, pos.coords.longitude, pos.coords.speed, pos.coords.accuracy),
-          (err) => console.warn("[tracker] web GPS error:", err.message),
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+          (pos) => {
+            const { latitude, longitude, speed, heading, accuracy } = pos.coords;
+            sendData(latitude, longitude, speed ?? null, heading ?? null, accuracy ?? null);
+          },
+          (err) => console.warn("[tracker] GPS error:", err.message),
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
         );
       }
     }
 
-    // 3. Start the native Foreground Service (keeps process alive during screen-off)
-    // The service does its OWN GPS polling via FusedLocationProviderClient + WakeLock,
-    // completely independent of the WebView. This is the real fix for screen-off death.
+    // ── Native foreground service — keeps GPS alive when screen is off ──────
     try {
-      // Extract the base URL (strip path) from the socketUrl
-      const baseUrl = socketUrl.replace(/\/$/, '');
       await TrackingService.start({
         employeeId,
         ownerUserId,
         name,
-        backendUrl: baseUrl,
+        backendUrl: socketUrl.replace(/\/$/, ""),
       });
-    } catch (e) {
-      console.warn("[tracker] native foreground service unavailable (web env):", e);
+    } catch {
+      // Web environment — expected
     }
 
-    // 4. App State Bridge — reconnect and re-join on foreground return
+    // ── App state bridge — reconnect on foreground return ───────────────────
     if (appListenerRef.current) appListenerRef.current.remove();
     appListenerRef.current = await App.addListener("appStateChange", ({ isActive }) => {
-      console.log("[tracker] appStateChange isActive:", isActive);
       if (isActive && socketRef.current) {
         const s = socketRef.current;
         if (!s.connected) {
-          console.log("[tracker] reconnecting socket after foreground restore");
           s.connect();
-          // employee-join will be re-emitted by the "connect" handler above
         } else {
-          // Already connected, but flush any offline buffer
           flush(s);
         }
       }
@@ -263,43 +282,39 @@ export function useLocationTracker() {
   }, [flush]);
 
   const stop = useCallback(() => {
-    try { TrackingService.stop(); } catch (e) {}
+    try { TrackingService.stop(); } catch { /* web env */ }
 
     if (watchIdRef.current != null) {
       if (typeof watchIdRef.current === "string") {
-        Geolocation.clearWatch({ id: watchIdRef.current });
+        Geolocation.clearWatch({ id: watchIdRef.current as string });
       } else {
         navigator.geolocation.clearWatch(watchIdRef.current as number);
       }
       watchIdRef.current = null;
     }
 
-    if (motionListenerRef.current) {
-      motionListenerRef.current.remove();
-      motionListenerRef.current = null;
-    }
+    motionListenerRef.current?.remove();
+    motionListenerRef.current = null;
 
-    if (appListenerRef.current) {
-      appListenerRef.current.remove();
-      appListenerRef.current = null;
-    }
+    appListenerRef.current?.remove();
+    appListenerRef.current = null;
 
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
+    socketRef.current?.disconnect();
+    socketRef.current = null;
 
-    activeRef.current = false;
-    prevRef.current = null;
-    bufferRef.current = [];
+    activeRef.current     = false;
+    prevRef.current       = null;
+    lastEmitTs.current    = 0;
+    bufferRef.current     = [];
     employeeIdRef.current = "";
     ownerUserIdRef.current = "";
-    nameRef.current = "";
-    toast.info("Live Tracking Stopped.");
+    nameRef.current       = "";
   }, []);
 
-  const isActive = () => activeRef.current;
-  const socket = () => socketRef.current;
-
-  return { start, stop, isActive, socket };
+  return {
+    start,
+    stop,
+    isActive: () => activeRef.current,
+    socket:   () => socketRef.current,
+  };
 }

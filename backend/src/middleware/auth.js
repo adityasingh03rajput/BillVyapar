@@ -1,10 +1,16 @@
 import { verifyAccessToken } from '../lib/jwt.js';
 import { Session } from '../models/Session.js';
+import { Employee } from '../models/Employee.js';
 
 // Throttle session lastActive updates — only write to DB once per 5 min per device
 // This cuts DB writes by ~99% for active users
 const sessionUpdateCache = new Map(); // key: `${userId}:${deviceId}` → last update timestamp
 const SESSION_UPDATE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+// ── Employee isActive cache (Flaw #3 & #15 fix) ───────────────────────────────
+// Avoids a DB hit on every request while still enforcing deactivation within 60s.
+const employeeActiveCache = new Map(); // key: employeeId → { isActive, ts }
+const EMPLOYEE_CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 export async function requireAuth(req, res, next) {
   try {
@@ -25,10 +31,32 @@ export async function requireAuth(req, res, next) {
     req.userId = payload.sub;
     req.user = payload.user;
 
+    // ── Flaw #3 & #15: enforce isActive for employee tokens ──────────────────
+    // Deactivating an employee now takes effect within 60s even for existing sessions.
+    if (payload.user?.userType === 'employee') {
+      const cached = employeeActiveCache.get(payload.sub);
+      const now = Date.now();
+      if (!cached || now - cached.ts > EMPLOYEE_CACHE_TTL_MS) {
+        const emp = await Employee.findById(payload.sub).select('isActive').lean();
+        const isActive = emp?.isActive ?? false;
+        employeeActiveCache.set(payload.sub, { isActive, ts: now });
+        if (!isActive) {
+          return res.status(401).json({ error: 'Your account has been deactivated. Contact your employer.' });
+        }
+      } else if (!cached.isActive) {
+        return res.status(401).json({ error: 'Your account has been deactivated. Contact your employer.' });
+      }
+    }
+
     next();
   } catch (err) {
     next(err);
   }
+}
+
+// Exported so the employees route can invalidate the cache immediately on deactivation
+export function invalidateEmployeeActiveCache(employeeId) {
+  employeeActiveCache.delete(String(employeeId));
 }
 
 export async function requireValidDeviceSession(req, res, next) {

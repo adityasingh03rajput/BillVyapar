@@ -1,98 +1,97 @@
 /**
- * animateMarker — smooth interpolation between two lat/lng points
- * for Google Maps markers, Zomato-style.
+ * markerAnimation.ts — Google-level smooth marker movement
  *
- * Usage:
- *   animateMarker(marker, { lat: 0, lng: 0 }, { lat: 0.001, lng: 0.001 }, 2000)
- *
- * Dead reckoning:
- *   predictNext(last, speedMs, headingRad, deltaMs) → { lat, lng }
- *
- * DigiPin:
- *   encodeDigiPin(lat, lng) → "IN-XXXXX-XXXXX"
+ * animateMarker  : smooth cubic-bezier interpolation between two lat/lng points
+ * bearing        : compass heading between two points (degrees 0-360)
+ * haversineM     : distance in metres between two points
+ * encodeDigiPin  : Indian national digital address (DigiPin)
  */
-
-const DIGIPIN_CHARS = "23456789CJKLMPFT";
 
 export interface LatLng { lat: number; lng: number }
 
+/** Cubic ease-out — fast start, smooth deceleration (feels like real movement) */
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
 /**
- * Smoothly moves a Google Maps marker from `start` → `end` over `durationMs`.
+ * Smoothly moves a Google Maps marker from start to end over durationMs.
+ * Uses cubic ease-out for natural deceleration.
  * Returns a cancel function — call it to abort mid-animation.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function animateMarker(
   marker: any,
   start: LatLng,
   end: LatLng,
-  durationMs = 2000,
+  durationMs = 1500,
 ): () => void {
   let rafId: number | null = null;
+  let cancelled = false;
   const startTime = performance.now();
 
+  // Skip animation if distance is negligible — avoids jitter on stationary pings
+  const dist = haversineM(start, end);
+  if (dist < 1) {
+    marker.setPosition(end);
+    return () => {};
+  }
+
   function frame(now: number) {
+    if (cancelled) return;
     const progress = Math.min((now - startTime) / durationMs, 1);
-    // Ease-in-out for natural feel
-    const ease = progress < 0.5
-      ? 2 * progress * progress
-      : -1 + (4 - 2 * progress) * progress;
-
-    const lat = start.lat + (end.lat - start.lat) * ease;
-    const lng = start.lng + (end.lng - start.lng) * ease;
-    marker.setPosition({ lat, lng });
-
-    if (progress < 1) rafId = requestAnimationFrame(frame);
+    const ease = easeOutCubic(progress);
+    marker.setPosition({
+      lat: start.lat + (end.lat - start.lat) * ease,
+      lng: start.lng + (end.lng - start.lng) * ease,
+    });
+    if (progress < 1) {
+      rafId = requestAnimationFrame(frame);
+    }
   }
 
   rafId = requestAnimationFrame(frame);
-  return () => { if (rafId) cancelAnimationFrame(rafId); };
-}
-
-/**
- * Dead reckoning — extrapolate position when no update arrives (< 10s)
- * speedMs   : metres per millisecond
- * headingRad: direction of travel in radians (0 = North, clockwise)
- * deltaMs   : time since last known point
- */
-export function predictNext(
-  last: LatLng,
-  speedMs: number,
-  headingRad: number,
-  deltaMs: number,
-): LatLng {
-  const dist = speedMs * deltaMs;        // metres travelled
-  const R    = 6371000;                  // Earth radius m
-  const dLat = (dist * Math.cos(headingRad)) / R;
-  const dLng = (dist * Math.sin(headingRad)) / (R * Math.cos((last.lat * Math.PI) / 180));
-  return {
-    lat: last.lat + (dLat * 180) / Math.PI,
-    lng: last.lng + (dLng * 180) / Math.PI,
+  return () => {
+    cancelled = true;
+    if (rafId !== null) cancelAnimationFrame(rafId);
+    marker.setPosition(end);
   };
 }
 
 /**
- * Compute bearing in radians between two lat/lng points.
- * Used to feed `headingRad` into predictNext().
+ * Compute compass bearing in degrees (0=North, 90=East, clockwise)
  */
 export function bearing(from: LatLng, to: LatLng): number {
-  const φ1 = (from.lat * Math.PI) / 180;
-  const φ2 = (to.lat  * Math.PI) / 180;
-  const dλ = ((to.lng - from.lng) * Math.PI) / 180;
-  return Math.atan2(
-    Math.sin(dλ) * Math.cos(φ2),
-    Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dλ),
-  );
+  const phi1 = (from.lat * Math.PI) / 180;
+  const phi2 = (to.lat * Math.PI) / 180;
+  const dl = ((to.lng - from.lng) * Math.PI) / 180;
+  const y = Math.sin(dl) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dl);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
 /**
- * encodeDigiPin — Indian national digital address system (10 chars, 4x4m grid)
+ * Haversine distance in metres between two lat/lng points.
  */
+export function haversineM(a: LatLng, b: LatLng): number {
+  const R = 6371000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) *
+      Math.cos((b.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+/**
+ * encodeDigiPin — Indian national digital address system (10 chars, ~4x4m grid)
+ */
+const DIGIPIN_CHARS = "23456789CJKLMPFT";
+
 export function encodeDigiPin(lat: number, lng: number): string {
-  // India's bounding box for DigiPin
-  const MIN_LAT = 2.5; 
-  const MAX_LAT = 38.5;
-  const MIN_LNG = 63.5;
-  const MAX_LNG = 99.5;
+  const MIN_LAT = 2.5, MAX_LAT = 38.5;
+  const MIN_LNG = 63.5, MAX_LNG = 99.5;
 
   if (lat < MIN_LAT || lat > MAX_LAT || lng < MIN_LNG || lng > MAX_LNG) {
     return "GLOBAL";
@@ -106,24 +105,19 @@ export function encodeDigiPin(lat: number, lng: number): string {
     const latStep = (curMaxLat - curMinLat) / 4;
     const lngStep = (curMaxLng - curMinLng) / 4;
 
-    // Row 0 is Top (North), Row 3 is Bottom (South)
     let row = Math.floor((curMaxLat - lat) / latStep);
     if (row < 0) row = 0; if (row > 3) row = 3;
-
-    // Col 0 is Left (West), Col 3 is Right (East)
     let col = Math.floor((lng - curMinLng) / lngStep);
     if (col < 0) col = 0; if (col > 3) col = 3;
 
-    const index = row * 4 + col;
-    code += DIGIPIN_CHARS[index];
+    code += DIGIPIN_CHARS[row * 4 + col];
 
-    // Narrow bounds for next level
     curMaxLat = curMaxLat - row * latStep;
     curMinLat = curMaxLat - latStep;
     curMinLng = curMinLng + col * lngStep;
     curMaxLng = curMinLng + lngStep;
 
-    if (i === 4) code += "-"; // Formatting break
+    if (i === 4) code += "-";
   }
 
   return code;

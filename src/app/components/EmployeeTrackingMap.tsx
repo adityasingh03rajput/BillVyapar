@@ -2,18 +2,20 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { API_URL } from "../config/api";
 import { useAuth } from "../contexts/AuthContext";
-import { animateMarker, encodeDigiPin, type LatLng } from "../utils/markerAnimation";
+import { animateMarker, bearing, haversineM, encodeDigiPin, type LatLng } from "../utils/markerAnimation";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LiveEmployee {
   employeeId: string;
   name: string;
   lat: number;
   lng: number;
-  updatedAt: string;   // ISO
+  updatedAt: string;
   online: boolean;
-  // for dead reckoning
-  prevLat?: number;
-  prevLng?: number;
+  speed: number | null;    // m/s from GPS
+  heading: number | null;  // degrees 0-360
+  accuracy: number | null; // metres
   schedule?: {
     geofenceMeters?: number;
     workLocation?: { lat: number; lng: number; address: string };
@@ -28,14 +30,21 @@ declare global {
   }
 }
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const GOOGLE_MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ?? "";
-// 45s stale threshold: native service posts every 15s, but Doze/network can add
-// 10-20s of delay. 20s was too tight — employees kept flipping to stale between pings.
-const STALE_THRESHOLD_MS = 45_000;
+
+// 60s stale: native posts every 15s, web every 20-30s. 60s = 4x buffer.
+const STALE_THRESHOLD_MS = 60_000;
+
+// Auto-refresh snapshot every 60s to catch employees who joined while map was open
+const SNAPSHOT_REFRESH_MS = 60_000;
+
+// ── Google Maps loader (singleton) ────────────────────────────────────────────
 
 function loadGoogleMaps(): Promise<void> {
   return new Promise((resolve) => {
-    if (window.google?.maps) return resolve();
+    if (window.google?.maps?.Map) return resolve();
     if (!window._gmapResolvers) window._gmapResolvers = [];
     window._gmapResolvers.push(resolve);
     if (window._gmapLoading) return;
@@ -43,85 +52,159 @@ function loadGoogleMaps(): Promise<void> {
     (window as any)._gmapCallback = () => {
       window._gmapResolvers?.forEach((r) => r());
       window._gmapResolvers = [];
+      window._gmapLoading = false;
     };
     const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&callback=_gmapCallback&loading=async&v=weekly`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&callback=_gmapCallback&libraries=geometry,marker&loading=async&v=weekly`;
     s.async = true;
+    s.onerror = () => console.error("[map] Google Maps failed to load");
     document.head.appendChild(s);
   });
 }
 
-/** Seconds since ISO string, capped to 99 */
+// ── Marker content builder (Advanced Markers) ───────────────────────────────
+
+function buildMarkerContent(emp: LiveEmployee, color: string, isMoving: boolean, isStale: boolean) {
+  const div = document.createElement("div");
+  div.style.position = "relative";
+  
+  if (isMoving && emp.heading != null) {
+    // Arrow for moving employees
+    div.innerHTML = `
+      <div style="transform: rotate(${emp.heading}deg); transition: transform 0.3s">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z" fill="${color}" stroke="#fff" stroke-width="2"/>
+        </svg>
+      </div>
+    `;
+  } else {
+    // Pulse pin for stationary/offline employees
+    div.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+        <div style="
+          width: 32px; height: 32px; 
+          background: ${color}; 
+          border-radius: 12px 12px 12px 0; 
+          transform: rotate(-45deg); 
+          border: 2px solid white; 
+          display: flex; 
+          align-items: center; 
+          justify-content: center;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        ">
+          <div style="transform: rotate(45deg); color: white; font-weight: 800; font-size: 14px;">
+            ${emp.name[0].toUpperCase()}
+          </div>
+        </div>
+        ${emp.online && !isStale ? `
+          <div style="
+            position: absolute; top: -4px; right: -4px; 
+            width: 12px; height: 12px; 
+            background: #22c55e; 
+            border: 2px solid white; 
+            border-radius: 50%; 
+            animation: livePulse 2s infinite;
+          "></div>
+        ` : ''}
+      </div>
+    `;
+  }
+  return div;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function secAgo(iso: string): number {
-  return Math.min(99, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
 }
 
 function fmtAgo(sec: number): string {
-  if (sec < 5)  return "just now";
-  if (sec < 60) return `${sec}s ago`;
-  return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 5)   return "just now";
+  if (sec < 60)  return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  return `${Math.floor(sec / 3600)}h ago`;
 }
+
+function fmtSpeed(mps: number | null): string {
+  if (mps == null || mps < 0.5) return "Stationary";
+  const kmh = mps * 3.6;
+  if (kmh < 5)  return `Walking ${kmh.toFixed(1)} km/h`;
+  if (kmh < 25) return `Cycling ${kmh.toFixed(1)} km/h`;
+  return `Driving ${kmh.toFixed(1)} km/h`;
+}
+
+function headingArrow(deg: number | null): string {
+  if (deg == null) return "";
+  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export function EmployeeTrackingMap({ profileId }: { profileId?: string | null }) {
   const { accessToken, user } = useAuth();
-  const mapRef          = useRef<HTMLDivElement>(null);
-  const mapInstanceRef  = useRef<any>(null);
-  const markersRef      = useRef<Map<string, any>>(new Map());
-  const cancelAnimRef   = useRef<Map<string, () => void>>(new Map());  // cancel in-flight animations
-  const prevPosRef      = useRef<Map<string, LatLng>>(new Map());      // for animation start
-  const geofenceRef     = useRef<Map<string, any>>(new Map());         // google.maps.Circle
-  const infoWindowRef   = useRef<any>(null);
-  const socketRef       = useRef<Socket | null>(null);
-  const drTimerRef      = useRef<number | null>(null);
+
+  // Map refs
+  const mapRef         = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markersRef     = useRef<Map<string, any>>(new Map());
+  const cancelAnimRef  = useRef<Map<string, () => void>>(new Map());
+  const prevPosRef     = useRef<Map<string, LatLng>>(new Map());
+  const geofenceRef    = useRef<Map<string, any>>(new Map());
+  const trailRef       = useRef<Map<string, any>>(new Map());   // Polyline per employee
+  const infoWindowRef  = useRef<any>(null);
+  const socketRef      = useRef<Socket | null>(null);
+
+  // State
   const [employees, setEmployees] = useState<Map<string, LiveEmployee>>(new Map());
-  const [staleSet,  setStaleSet]  = useState<Set<string>>(new Set());  // IDs considered stale
+  const [staleSet,  setStaleSet]  = useState<Set<string>>(new Set());
   const [mapReady,  setMapReady]  = useState(false);
   const [loading,   setLoading]   = useState(true);
-  const [mapType, setMapType]     = useState<"roadmap" | "satellite" | "hybrid" | "terrain">("roadmap");
-  const [, setTick] = useState(0); // forces re-render every second to update "last seen" timestamps
+  const [mapType,   setMapType]   = useState<"roadmap" | "satellite" | "hybrid" | "terrain">("roadmap");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [, setTick] = useState(0);
 
-  // ── Load last-known locations from REST (initial snapshot) ─────────────────
+  // Trail points per employee — kept in ref so marker effect can read without re-running
+  const trailPointsRef = useRef<Map<string, LatLng[]>>(new Map());
+
+  // ── Snapshot loader ─────────────────────────────────────────────────────────
   const loadSnapshot = useCallback(async () => {
     setLoading(true);
     try {
       const params = profileId ? `?profileId=${profileId}` : "";
-      const res  = await fetch(`${API_URL}/attendance/live${params}`, {
+      const res = await fetch(`${API_URL}/attendance/live${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const data = await res.json();
-      if (Array.isArray(data)) {
-        const freshStale = new Set<string>();
-        setEmployees((prev) => {
-          const next = new Map(prev);
-          for (const r of data) {
-            if (!r.lastLocation?.lat) continue;
-            const id = String(r.employeeId._id ?? r.employeeId);
-            const lastUpdatedMs = r.lastLocation?.updatedAt
-              ? Date.now() - new Date(r.lastLocation.updatedAt).getTime()
-              : Infinity;
-            const wasRecentlyActive = lastUpdatedMs < STALE_THRESHOLD_MS;
-            if (!wasRecentlyActive) freshStale.add(id);
-            next.set(id, {
-              employeeId: id,
-              name:       r.employeeId?.name ?? "Employee",
-              lat:        r.lastLocation.lat,
-              lng:        r.lastLocation.lng,
-              updatedAt:  r.lastLocation.updatedAt,
-              // Only mark online if recently active; socket events will update this
-              online:     next.get(id)?.online ?? wasRecentlyActive,
-              schedule:   r.employeeId?.schedule,
-            });
-          }
-          return next;
-        });
-        // Immediately mark stale employees so they show grey, not green
-        if (freshStale.size > 0) {
-          setStaleSet((prev) => {
-            const next = new Set(prev);
-            freshStale.forEach((id) => next.add(id));
-            return next;
+      if (!Array.isArray(data)) return;
+
+      const freshStale = new Set<string>();
+      setEmployees((prev) => {
+        const next = new Map(prev);
+        for (const r of data) {
+          if (!r.lastLocation?.lat) continue;
+          const id = String(r.employeeId?._id ?? r.employeeId);
+          const ageMs = r.lastLocation?.updatedAt
+            ? Date.now() - new Date(r.lastLocation.updatedAt).getTime()
+            : Infinity;
+          if (ageMs >= STALE_THRESHOLD_MS) freshStale.add(id);
+          next.set(id, {
+            employeeId: id,
+            name:       r.employeeId?.name ?? "Employee",
+            lat:        r.lastLocation.lat,
+            lng:        r.lastLocation.lng,
+            updatedAt:  r.lastLocation.updatedAt ?? new Date().toISOString(),
+            online:     next.get(id)?.online ?? ageMs < STALE_THRESHOLD_MS,
+            speed:      r.lastLocation.speed   ?? null,
+            heading:    r.lastLocation.heading  ?? null,
+            accuracy:   r.lastLocation.accuracy ?? null,
+            schedule:   r.employeeId?.schedule,
           });
         }
+        return next;
+      });
+      if (freshStale.size > 0) {
+        setStaleSet((prev) => { const n = new Set(prev); freshStale.forEach(id => n.add(id)); return n; });
       }
     } catch { /* silent */ }
     finally { setLoading(false); }
@@ -134,12 +217,17 @@ export function EmployeeTrackingMap({ profileId }: { profileId?: string | null }
       mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
         center: { lat: 20.5937, lng: 78.9629 },
         zoom: 5,
+        mapId: "EMPLOYEE_TRACKING_MAP",
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: true,
-        styles: [{ featureType: "poi", stylers: [{ visibility: "off" }] }],
+        zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
+        styles: [
+          { featureType: "poi", stylers: [{ visibility: "off" }] },
+          { featureType: "transit", stylers: [{ visibility: "simplified" }] },
+        ],
       });
-      infoWindowRef.current = new window.google.maps.InfoWindow();
+      infoWindowRef.current = new window.google.maps.InfoWindow({ maxWidth: 280 });
       setMapReady(true);
     });
   }, []);
@@ -147,14 +235,19 @@ export function EmployeeTrackingMap({ profileId }: { profileId?: string | null }
   // ── Socket.io ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
-    const socket = io(API_URL, { path: "/socket.io", transports: ["websocket", "polling"] });
+    const socket = io(API_URL, {
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+      auth: { token: accessToken || "" },
+    });
     socketRef.current = socket;
 
-    socket.on("connect", () => { socket.emit("join-owner", user.id); });
+    socket.on("connect", () => socket.emit("join-owner"));
 
     socket.on("employee-location", (data: {
       employeeId: string; name: string;
       lat: number; lng: number; updatedAt: string;
+      speed: number | null; heading: number | null; accuracy: number | null;
     }) => {
       setEmployees((prev) => {
         const next = new Map(prev);
@@ -166,210 +259,267 @@ export function EmployeeTrackingMap({ profileId }: { profileId?: string | null }
           lng:        data.lng,
           updatedAt:  data.updatedAt,
           online:     true,
-          prevLat:    existing?.lat,
-          prevLng:    existing?.lng,
+          speed:      data.speed,
+          heading:    data.heading,
+          accuracy:   data.accuracy,
           schedule:   existing?.schedule,
         });
         return next;
       });
-      // Remove from stale set on fresh update
+      // Append to trail
+      trailPointsRef.current.set(
+        data.employeeId,
+        [...(trailPointsRef.current.get(data.employeeId) ?? []).slice(-120),
+          { lat: data.lat, lng: data.lng }]
+      );
       setStaleSet((prev) => { const n = new Set(prev); n.delete(data.employeeId); return n; });
     });
 
     socket.on("employee-online", ({ employeeId, online }: { employeeId: string; online: boolean }) => {
       setEmployees((prev) => {
         const next = new Map(prev);
-        const existing = next.get(employeeId);
-        if (existing) next.set(employeeId, { ...existing, online });
+        const e = next.get(employeeId);
+        if (e) next.set(employeeId, { ...e, online });
         return next;
       });
     });
 
-    return () => { socket.disconnect(); };
-  }, [user?.id]);
+    return () => { socket.disconnect(); socketRef.current = null; };
+  }, [user?.id, accessToken]);
 
-  // ── Stale detection — check every 5s ───────────────────────────────────────
+  // ── Stale detection every 10s ───────────────────────────────────────────────
   useEffect(() => {
     const id = window.setInterval(() => {
+      const now = Date.now();
       setStaleSet(() => {
         const next = new Set<string>();
         setEmployees((emps) => {
           emps.forEach((e) => {
-            if (Date.now() - new Date(e.updatedAt).getTime() > STALE_THRESHOLD_MS) {
-              next.add(e.employeeId);
-            }
+            if (now - new Date(e.updatedAt).getTime() > STALE_THRESHOLD_MS) next.add(e.employeeId);
           });
-          return emps; // no mutation
+          return emps;
         });
         return next;
       });
-    }, 5000);
+    }, 10_000);
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => { loadSnapshot(); }, [loadSnapshot]);
+  // ── Auto-refresh snapshot ───────────────────────────────────────────────────
+  useEffect(() => {
+    loadSnapshot();
+    const id = window.setInterval(loadSnapshot, SNAPSHOT_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [loadSnapshot]);
 
-  // ── Tick every second to keep "last seen X ago" labels live ───────────────
+  // ── Tick every second for live timestamps ───────────────────────────────────
   useEffect(() => {
     const id = window.setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
-    // ── Fit Map to Markers ──────────────────────────────────────────────────
-    const fitAllMarkers = useCallback(() => {
-      if (!mapInstanceRef.current || employees.size === 0) return;
-      const bounds = new window.google.maps.LatLngBounds();
-      employees.forEach((e) => bounds.extend({ lat: e.lat, lng: e.lng }));
-      mapInstanceRef.current.fitBounds(bounds);
-      if (employees.size === 1) mapInstanceRef.current.setZoom(20);
-    }, [employees]);
+  // ── Fit map to all markers ──────────────────────────────────────────────────
+  const fitAllMarkers = useCallback(() => {
+    if (!mapInstanceRef.current || employees.size === 0) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    employees.forEach((e) => bounds.extend({ lat: e.lat, lng: e.lng }));
+    mapInstanceRef.current.fitBounds(bounds, { top: 60, right: 20, bottom: 20, left: 20 });
+    if (employees.size === 1) mapInstanceRef.current.setZoom(18);
+  }, [employees]);
 
-    const hasInitialFitRef = useRef(false);
-    useEffect(() => {
-      if (mapReady && employees.size > 0 && !hasInitialFitRef.current) {
-        fitAllMarkers();
-        hasInitialFitRef.current = true;
-      }
-    }, [mapReady, employees.size, fitAllMarkers]);
+  const hasInitialFit = useRef(false);
+  useEffect(() => {
+    if (mapReady && employees.size > 0 && !hasInitialFit.current) {
+      fitAllMarkers();
+      hasInitialFit.current = true;
+    }
+  }, [mapReady, employees.size, fitAllMarkers]);
 
-    // ── Sync markers + smooth animation ────────────────────────────────────────
-    useEffect(() => {
+  // ── Focus on selected employee ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!selectedId || !mapInstanceRef.current) return;
+    const emp = employees.get(selectedId);
+    if (!emp) return;
+    mapInstanceRef.current.panTo({ lat: emp.lat, lng: emp.lng });
+    if (mapInstanceRef.current.getZoom() < 17) mapInstanceRef.current.setZoom(17);
+  }, [selectedId]);
+
+  // ── Sync markers, trails, geofences ────────────────────────────────────────
+  useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
     const map     = mapInstanceRef.current;
     const markers = markersRef.current;
 
     employees.forEach((emp) => {
       const isStale   = staleSet.has(emp.employeeId);
-      const isOut     = emp.schedule?.workLocation?.lat && emp.schedule?.geofenceMeters && 
-                        haversineM({ lat: emp.lat, lng: emp.lng }, { lat: emp.schedule.workLocation.lat, lng: emp.schedule.workLocation.lng }) > emp.schedule.geofenceMeters;
+      const isMoving  = emp.speed != null && emp.speed > 0.8; // > ~3 km/h
+      const isOut     = !!(
+        emp.schedule?.workLocation?.lat &&
+        emp.schedule?.geofenceMeters &&
+        haversineM({ lat: emp.lat, lng: emp.lng }, {
+          lat: emp.schedule.workLocation.lat,
+          lng: emp.schedule.workLocation.lng,
+        }) > emp.schedule.geofenceMeters
+      );
 
-      const color     = isStale ? "#94a3b8" : isOut ? "#f43f5e" : emp.online ? "#22c55e" : "#6366f1";
-      const targetPos = { lat: emp.lat, lng: emp.lng };
+      // Color: grey=stale, red=out-of-geofence, green=live+online, indigo=online-not-moving
+      const color = isStale ? "#94a3b8" : isOut ? "#f43f5e" : emp.online ? "#22c55e" : "#6366f1";
+      const targetPos: LatLng = { lat: emp.lat, lng: emp.lng };
 
       if (markers.has(emp.employeeId)) {
+        // ── Update existing marker ──────────────────────────────────────────
         const m = markers.get(emp.employeeId)!;
-        // Cancel any in-flight animation before starting a new one
-        cancelAnimRef.current.get(emp.employeeId)?.();
 
-        const start: LatLng = prevPosRef.current.get(emp.employeeId) ?? targetPos;
-        const cancel = animateMarker(m, start, targetPos, 2000);
+        // Cancel in-flight animation, start new one from last known position
+        cancelAnimRef.current.get(emp.employeeId)?.();
+        const startPos = prevPosRef.current.get(emp.employeeId) ?? targetPos;
+        const cancel = animateMarker(m, startPos, targetPos, 1200);
         cancelAnimRef.current.set(emp.employeeId, cancel);
         prevPosRef.current.set(emp.employeeId, targetPos);
 
-        m.setIcon({
-          path: "M12 2C8.13 2 5 5.13 5 9c0 4.17 4.42 9.92 6.24 12.11.4.48 1.13.48 1.53 0C14.58 18.92 19 13.17 19 9c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
-          fillColor: color,
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 2.5,
-          scale: 1.5,
-          anchor: new window.google.maps.Point(12, 24),
-          labelOrigin: new window.google.maps.Point(12, 9),
-        });
+        m.content = buildMarkerContent(emp, color, isMoving, isStale);
 
-        // ── Geofence Circle Sync ──
+        // ── Update trail polyline ───────────────────────────────────────────
+        const pts = trailPointsRef.current.get(emp.employeeId) ?? [];
+        if (trailRef.current.has(emp.employeeId)) {
+          trailRef.current.get(emp.employeeId).setPath(pts);
+        } else if (pts.length > 1) {
+          const poly = new window.google.maps.Polyline({
+            map,
+            path: pts,
+            strokeColor: color,
+            strokeOpacity: 0.55,
+            strokeWeight: 3,
+            icons: [{
+              icon: { path: window.google.maps.SymbolPath.FORWARD_OPEN_ARROW, scale: 2.5, strokeColor: color },
+              offset: "100%",
+              repeat: "80px",
+            }],
+          });
+          trailRef.current.set(emp.employeeId, poly);
+        }
+
+        // ── Update geofence circle ──────────────────────────────────────────
         if (geofenceRef.current.has(emp.employeeId)) {
           const c = geofenceRef.current.get(emp.employeeId);
           if (emp.schedule?.workLocation?.lat && emp.schedule?.geofenceMeters) {
             c.setCenter({ lat: emp.schedule.workLocation.lat, lng: emp.schedule.workLocation.lng });
             c.setRadius(emp.schedule.geofenceMeters);
-            c.setOptions({ strokeColor: isOut ? "#f43f5e" : "#6366f1", fillOpacity: isOut ? 0.15 : 0.08 });
+            c.setOptions({
+              strokeColor: isOut ? "#f43f5e" : "#6366f1",
+              fillColor:   isOut ? "#f43f5e" : "#6366f1",
+              fillOpacity: isOut ? 0.12 : 0.06,
+            });
           } else {
-            c.setMap(null);
+            geofenceRef.current.get(emp.employeeId).setMap(null);
             geofenceRef.current.delete(emp.employeeId);
           }
         } else if (emp.schedule?.workLocation?.lat && emp.schedule?.geofenceMeters) {
-           const circle = new window.google.maps.Circle({
-             map,
-             center: { lat: emp.schedule.workLocation.lat, lng: emp.schedule.workLocation.lng },
-             radius: emp.schedule.geofenceMeters,
-             fillColor: "#6366f1",
-             fillOpacity: 0.08,
-             strokeColor: "#6366f1",
-             strokeWeight: 1,
-             strokeOpacity: 0.2,
-             clickable: false
-           });
-           geofenceRef.current.set(emp.employeeId, circle);
+          const circle = new window.google.maps.Circle({
+            map,
+            center: { lat: emp.schedule.workLocation.lat, lng: emp.schedule.workLocation.lng },
+            radius: emp.schedule.geofenceMeters,
+            fillColor: "#6366f1", fillOpacity: 0.06,
+            strokeColor: "#6366f1", strokeWeight: 1.5, strokeOpacity: 0.4,
+            clickable: false,
+          });
+          geofenceRef.current.set(emp.employeeId, circle);
         }
+
       } else {
-        // First time — place marker immediately, no animation needed
+        // ── Create new marker (AdvancedMarkerElement) ───────────────────────
         prevPosRef.current.set(emp.employeeId, targetPos);
-        const marker = new window.google.maps.Marker({
+        const marker = new window.google.maps.marker.AdvancedMarkerElement({
           map,
           position: targetPos,
           title: emp.name,
-          icon: {
-            path: "M12 2C8.13 2 5 5.13 5 9c0 4.17 4.42 9.92 6.24 12.11.4.48 1.13.48 1.53 0C14.58 18.92 19 13.17 19 9c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
-            fillColor: color,
-            fillOpacity: 1,
-            strokeColor: "#fff",
-            strokeWeight: 2,
-            scale: 1.5,
-            anchor: new window.google.maps.Point(12, 24),
-            labelOrigin: new window.google.maps.Point(12, 9),
-          },
-          label: {
-            text: emp.name[0].toUpperCase(),
-            color: "#fff",
-            fontWeight: "bold",
-            fontSize: "10px",
-          },
+          content: buildMarkerContent(emp, color, isMoving, isStale),
+          zIndex: emp.online ? 10 : 5,
         });
 
         marker.addListener("click", async () => {
-          const e = employees.get(emp.employeeId)!;
+          setSelectedId(emp.employeeId);
+          const e = employees.get(emp.employeeId) ?? emp;
           const sec = secAgo(e.updatedAt);
-          const t = new Date(e.updatedAt).toLocaleTimeString("en-IN", {
-            hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata",
-          });
           const pin = encodeDigiPin(e.lat, e.lng);
-          
-          const buildContent = (addressHtml: string) => `
-            <div style="font-family:system-ui;padding:4px 2px;min-width:170px;max-width:240px">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <div style="width:8px;height:8px;border-radius:50%;background:${isStale ? "#94a3b8" : e.online ? "#22c55e" : "#6366f1"}"></div>
-                  <strong style="font-size:14px;color:#000">${e.name}</strong>
+          const speedStr = fmtSpeed(e.speed);
+          const hdg = headingArrow(e.heading);
+          const isStaleNow = staleSet.has(e.employeeId);
+
+          const buildContent = (addrHtml: string) => `
+            <div style="font-family:system-ui,-apple-system,sans-serif;padding:2px;min-width:200px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <div style="width:36px;height:36px;border-radius:50%;background:${isStaleNow ? "#94a3b8" : e.online ? "#22c55e" : "#6366f1"};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0">
+                  ${e.name[0].toUpperCase()}
                 </div>
-                <div style="background:#f1f5f9;padding:2px 6px;border-radius:6px;font-family:monospace;font-size:9px;font-weight:700;color:#475569;border:1px solid #e2e8f0">
+                <div>
+                  <div style="font-weight:700;font-size:14px;color:#0f172a">${e.name}</div>
+                  <div style="font-size:11px;color:${isStaleNow ? "#94a3b8" : e.online ? "#16a34a" : "#6366f1"};font-weight:600">
+                    ${isStaleNow ? "⚫ No signal" : e.online ? "● Live" : "○ Offline"} · ${fmtAgo(sec)}
+                  </div>
+                </div>
+                <div style="margin-left:auto;background:#f1f5f9;padding:2px 7px;border-radius:6px;font-family:monospace;font-size:9px;font-weight:700;color:#475569;border:1px solid #e2e8f0;white-space:nowrap">
                   DIGI-${pin}
                 </div>
               </div>
-              <div style="font-size:12px;color:#475569;margin-bottom:6px">Last update: ${t} (${fmtAgo(sec)})</div>
-              <div style="font-size:12px;color:#1e293b;margin-top:6px;line-height:1.4">📍 ${addressHtml}</div>
-              <div style="font-size:10px;color:#94a3b8;margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9">${e.lat.toFixed(6)}, ${e.lng.toFixed(6)}</div>
-              ${isStale ? `<div style="font-size:11px;color:#e11d48;margin-top:8px;padding:4px 8px;background:#fff1f2;border-radius:6px;font-weight:600">⚫ Signal Lost ${fmtAgo(sec)}</div>` : ""}
-            </div>
-          `;
+              <div style="background:#f8fafc;border-radius:8px;padding:8px 10px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div>
+                  <div style="font-size:9px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Speed</div>
+                  <div style="font-size:12px;font-weight:600;color:#0f172a">${speedStr}</div>
+                </div>
+                <div>
+                  <div style="font-size:9px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Heading</div>
+                  <div style="font-size:12px;font-weight:600;color:#0f172a">${hdg ? hdg + " " + (e.heading?.toFixed(0) ?? "") + "°" : "—"}</div>
+                </div>
+                <div>
+                  <div style="font-size:9px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Accuracy</div>
+                  <div style="font-size:12px;font-weight:600;color:#0f172a">${e.accuracy != null ? "±" + Math.round(e.accuracy) + "m" : "—"}</div>
+                </div>
+                <div>
+                  <div style="font-size:9px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Coords</div>
+                  <div style="font-size:10px;font-weight:500;color:#475569;font-family:monospace">${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}</div>
+                </div>
+              </div>
+              <div style="font-size:12px;color:#334155;line-height:1.5">📍 ${addrHtml}</div>
+              ${isStaleNow ? `<div style="margin-top:8px;padding:5px 8px;background:#fff1f2;border-radius:6px;font-size:11px;color:#e11d48;font-weight:600">⚫ Signal lost ${fmtAgo(sec)}</div>` : ""}
+            </div>`;
 
-          // Show immediate fallback
-          infoWindowRef.current.setContent(buildContent("<span style='color:#888'>Loading address...</span>"));
+          infoWindowRef.current.setContent(buildContent("<span style='color:#94a3b8'>Resolving address…</span>"));
           infoWindowRef.current.open(map, marker);
-          
-          // Focus and zoom
           map.panTo(marker.getPosition());
-          if (map.getZoom() < 20) map.setZoom(20);
+          if (map.getZoom() < 17) map.setZoom(17);
 
-          // Fetch robust reverse geocoding via our backend 100m cache layer
           try {
-            const res = await fetch(`${API_URL}/geocode?lat=${e.lat}&lng=${e.lng}`);
-            const data = await res.json();
-            if (data?.address) {
-              infoWindowRef.current.setContent(buildContent(data.address));
-            } else {
-              infoWindowRef.current.setContent(buildContent("<span style='color:#d97706'>Unknown Location</span>"));
-            }
+            const r = await fetch(`${API_URL}/geocode?lat=${e.lat}&lng=${e.lng}`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            const d = await r.json();
+            infoWindowRef.current.setContent(
+              buildContent(d?.address ?? "<span style='color:#d97706'>Unknown location</span>")
+            );
           } catch {
             infoWindowRef.current.setContent(buildContent("<span style='color:#ef4444'>Failed to load address</span>"));
           }
         });
 
         markers.set(emp.employeeId, marker);
+
+        // Create geofence circle for new employee
+        if (emp.schedule?.workLocation?.lat && emp.schedule?.geofenceMeters) {
+          const circle = new window.google.maps.Circle({
+            map,
+            center: { lat: emp.schedule.workLocation.lat, lng: emp.schedule.workLocation.lng },
+            radius: emp.schedule.geofenceMeters,
+            fillColor: "#6366f1", fillOpacity: 0.06,
+            strokeColor: "#6366f1", strokeWeight: 1.5, strokeOpacity: 0.4,
+            clickable: false,
+          });
+          geofenceRef.current.set(emp.employeeId, circle);
+        }
       }
     });
 
-    // Remove stale markers
+    // ── Remove markers for employees no longer tracked ──────────────────────
     markers.forEach((marker, id) => {
       if (!employees.has(id)) {
         cancelAnimRef.current.get(id)?.();
@@ -377,165 +527,170 @@ export function EmployeeTrackingMap({ profileId }: { profileId?: string | null }
         prevPosRef.current.delete(id);
         marker.setMap(null);
         markers.delete(id);
+        trailRef.current.get(id)?.setMap(null);
+        trailRef.current.delete(id);
+        trailPointsRef.current.delete(id);
         geofenceRef.current.get(id)?.setMap(null);
         geofenceRef.current.delete(id);
       }
     });
-  }, [employees, staleSet, mapReady]);
+  }, [employees, staleSet, mapReady, accessToken]);
 
-  // Dead reckoning removed — it was extrapolating GPS jitter between stationary
-  // pings as real movement, displacing the marker by 50–100m. The 15s native
-  // GPS interval is accurate enough without extrapolation.
-
-  // ── Apply map type changes ──────────────────────────────────────────────────
+  // ── Map type sync ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
     mapInstanceRef.current.setMapTypeId(mapType);
   }, [mapType, mapReady]);
 
-  const onlineCount = Array.from(employees.values()).filter((e) => e.online).length;
-  const staleCount  = staleSet.size;
+  // ── Derived stats ───────────────────────────────────────────────────────────
+  const onlineCount  = Array.from(employees.values()).filter((e) => e.online && !staleSet.has(e.employeeId)).length;
+  const staleCount   = staleSet.size;
+  const movingCount  = Array.from(employees.values()).filter((e) => e.speed != null && e.speed > 0.8).length;
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Status bar */}
+
+      {/* ── Status bar ─────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           {onlineCount > 0 && (
-            <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13 }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 1.5s infinite" }} />
-              <span style={{ color: "#22c55e", fontWeight: 600 }}>{onlineCount} live</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 600, color: "#16a34a" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "livePulse 2s infinite" }} />
+              {onlineCount} live
+            </span>
+          )}
+          {movingCount > 0 && (
+            <span style={{ fontSize: 13, color: "#6366f1", fontWeight: 600 }}>
+              🚶 {movingCount} moving
             </span>
           )}
           {staleCount > 0 && (
-            <span style={{ fontSize: 13, color: "#94a3b8" }}>
-              ⚫ {staleCount} no signal
-            </span>
+            <span style={{ fontSize: 13, color: "#94a3b8" }}>⚫ {staleCount} no signal</span>
           )}
           <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>
-            {employees.size} employee{employees.size !== 1 ? "s" : ""} tracked today
+            {employees.size} tracked today
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
-            type="button"
-            onClick={fitAllMarkers}
-            style={{ fontSize: 12, padding: "4px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--primary)", cursor: "pointer", color: "var(--primary-foreground)" }}
-          >
-            Re-center Map
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" onClick={fitAllMarkers}
+            style={{ fontSize: 12, padding: "5px 14px", borderRadius: 8, border: "none", background: "var(--primary)", color: "var(--primary-foreground)", cursor: "pointer", fontWeight: 600 }}>
+            Fit All
           </button>
-          <button
-            type="button"
-            onClick={loadSnapshot}
-            style={{ fontSize: 12, padding: "4px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", cursor: "pointer", color: "var(--foreground)" }}
-          >
+          <button type="button" onClick={loadSnapshot}
+            style={{ fontSize: 12, padding: "5px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--foreground)", cursor: "pointer" }}>
             Refresh
           </button>
         </div>
       </div>
 
       <style>{`
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
-        /* Hide Google Maps "For development purposes only" watermark text */
-        .gm-style div[style*="z-index: 1000000"] { display: none !important; }
-        .gm-style .dismissButton { display: none !important; }
-        .gm-err-container { display: none !important; }
+        @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.4)} }
+        @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* Map */}
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", height: 440 }}>
+      {/* ── Map container ──────────────────────────────────────────────────── */}
+      <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", border: "1px solid var(--border)", height: 480 }}>
         <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
 
         {/* Map type switcher */}
-        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 10, display: "flex", gap: 2, background: "rgba(255,255,255,0.92)", borderRadius: 8, padding: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.18)", backdropFilter: "blur(4px)" }}>
+        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 10, display: "flex", gap: 2, background: "rgba(255,255,255,0.95)", borderRadius: 10, padding: 3, boxShadow: "0 2px 12px rgba(0,0,0,0.15)", backdropFilter: "blur(8px)" }}>
           {(["roadmap", "satellite", "hybrid", "terrain"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setMapType(t)}
-              style={{
-                padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600,
+            <button key={t} type="button" onClick={() => setMapType(t)}
+              style={{ padding: "5px 11px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600,
                 background: mapType === t ? "#6366f1" : "transparent",
                 color: mapType === t ? "#fff" : "#444",
-                transition: "all 0.15s",
-                textTransform: "capitalize",
-              }}
-            >
-              {t === "roadmap" ? "🗺 Map" : t === "satellite" ? "🛰 Satellite" : t === "hybrid" ? "🔀 Hybrid" : "🏔 Terrain"}
+                transition: "all 0.15s" }}>
+              {t === "roadmap" ? "🗺 Map" : t === "satellite" ? "🛰 Sat" : t === "hybrid" ? "🔀 Hybrid" : "🏔 Terrain"}
             </button>
           ))}
         </div>
 
+        {/* Loading overlay */}
         {loading && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.04)", pointerEvents: "none" }}>
-            <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Loading…</span>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.6)", backdropFilter: "blur(4px)", pointerEvents: "none" }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid rgba(99,102,241,0.2)", borderTopColor: "#6366f1", animation: "spin 0.7s linear infinite" }} />
           </div>
         )}
 
+        {/* Empty state */}
         {!loading && employees.size === 0 && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, pointerEvents: "none" }}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.25 }}>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, pointerEvents: "none" }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" style={{ opacity: 0.2 }}>
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
               <circle cx="12" cy="9" r="2.5"/>
             </svg>
-            <p style={{ margin: 0, fontSize: 14, color: "var(--muted-foreground)" }}>No locations yet</p>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--muted-foreground)", opacity: 0.6 }}>Employees appear here once they check in</p>
+            <p style={{ margin: 0, fontSize: 15, color: "var(--muted-foreground)", fontWeight: 600 }}>No employees tracked yet</p>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--muted-foreground)", opacity: 0.6 }}>Employees appear here once they check in and share location</p>
           </div>
         )}
       </div>
 
-      {/* Employee list */}
+      {/* ── Employee roster ─────────────────────────────────────────────────── */}
       {employees.size > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {Array.from(employees.values()).map((emp) => {
-            const sec   = secAgo(emp.updatedAt);
-            const isStale = staleSet.has(emp.employeeId);
-            return (
-              <div key={emp.employeeId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--card)" }}>
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: isStale ? "#64748b" : emp.online ? "#22c55e" : "#6366f1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
-                    {emp.name[0].toUpperCase()}
+          {Array.from(employees.values())
+            .sort((a, b) => {
+              // Live first, then by last update
+              if (a.online !== b.online) return a.online ? -1 : 1;
+              return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+            })
+            .map((emp) => {
+              const sec     = secAgo(emp.updatedAt);
+              const isStale = staleSet.has(emp.employeeId);
+              const isMoving = emp.speed != null && emp.speed > 0.8;
+              const isSelected = selectedId === emp.employeeId;
+              const color   = isStale ? "#94a3b8" : emp.online ? "#22c55e" : "#6366f1";
+
+              return (
+                <div key={emp.employeeId}
+                  onClick={() => setSelectedId(isSelected ? null : emp.employeeId)}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 12,
+                    border: `1px solid ${isSelected ? "#6366f1" : "var(--border)"}`,
+                    background: isSelected ? "rgba(99,102,241,0.05)" : "var(--card)",
+                    cursor: "pointer", transition: "all 0.15s" }}>
+
+                  {/* Avatar with live dot */}
+                  <div style={{ position: "relative", flexShrink: 0 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: color,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "#fff", fontWeight: 700, fontSize: 14 }}>
+                      {emp.name[0].toUpperCase()}
+                    </div>
+                    {emp.online && !isStale && (
+                      <span style={{ position: "absolute", bottom: 0, right: 0, width: 11, height: 11,
+                        borderRadius: "50%", background: "#22c55e", border: "2px solid var(--card)",
+                        animation: "livePulse 2s infinite" }} />
+                    )}
                   </div>
-                  {emp.online && !isStale && (
-                    <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: "#22c55e", border: "2px solid var(--card)", animation: "pulse 1.5s infinite" }} />
-                  )}
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--foreground)" }}>{emp.name}</p>
+                      {isMoving && <span style={{ fontSize: 10, background: "rgba(99,102,241,0.1)", color: "#6366f1", padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>MOVING</span>}
+                    </div>
+                    <p style={{ margin: 0, fontSize: 11, color: "var(--muted-foreground)" }}>
+                      {isStale ? `⚫ No signal · ${fmtAgo(sec)}`
+                        : emp.online ? `● Live · ${fmtAgo(sec)} · ${fmtSpeed(emp.speed)}`
+                        : `○ Offline · ${fmtAgo(sec)}`}
+                    </p>
+                    <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--muted-foreground)", opacity: 0.7, fontFamily: "monospace" }}>
+                      DIGI-{encodeDigiPin(emp.lat, emp.lng)} · {emp.lat.toFixed(5)}, {emp.lng.toFixed(5)}
+                    </p>
+                  </div>
+
+                  {/* Status badge */}
+                  <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 20, fontWeight: 600, flexShrink: 0,
+                    background: isStale ? "rgba(148,163,184,0.1)" : emp.online ? "rgba(34,197,94,0.1)" : "rgba(99,102,241,0.1)",
+                    color: isStale ? "#94a3b8" : emp.online ? "#16a34a" : "#6366f1" }}>
+                    {isStale ? "No signal" : emp.online ? "● Live" : "Offline"}
+                  </span>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{emp.name}</p>
-                  <p style={{ margin: 0, fontSize: 11, color: "var(--muted-foreground)" }}>
-                    {isStale
-                      ? `⚫ No signal · last seen ${fmtAgo(sec)}`
-                      : emp.online
-                        ? `Live · ${fmtAgo(sec)}`
-                        : `Offline · ${fmtAgo(sec)}`}
-                  </p>
-                  <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--muted-foreground)", opacity: 0.8, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ background: "rgba(0,0,0,0.05)", padding: "1px 4px", borderRadius: 4 }}>DIGI-{encodeDigiPin(emp.lat, emp.lng)}</span>
-                    <span>{emp.lat.toFixed(5)}, {emp.lng.toFixed(5)}</span>
-                  </p>
-                </div>
-                <span style={{
-                  fontSize: 11, padding: "3px 8px", borderRadius: 20, fontWeight: 600, flexShrink: 0,
-                  background: isStale ? "rgba(100,116,139,0.1)" : emp.online ? "rgba(34,197,94,0.1)" : "rgba(100,116,139,0.1)",
-                  color: isStale ? "#94a3b8" : emp.online ? "#16a34a" : "var(--muted-foreground)",
-                }}>
-                  {isStale ? "⚫ No signal" : emp.online ? "● Live" : "Offline"}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })}
         </div>
       )}
     </div>
   );
-}
-
-// Haversine locally (no import needed) for dead-reckoning
-function haversineM(a: LatLng, b: LatLng): number {
-  const R = 6371000;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const x = Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }

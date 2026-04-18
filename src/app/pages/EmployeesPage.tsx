@@ -18,6 +18,7 @@ import { UserPlus, Pencil, Trash2, Users, ShieldCheck, Plus, CalendarDays, Folde
 import { AttendancePage } from './AttendancePage';
 import { ProjectsPage } from './ProjectsPage';
 import { TraceLoader } from '../components/TraceLoader';
+import { WorkLocationPicker } from '../components/WorkLocationPicker';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -140,9 +141,11 @@ export function EmployeesPage() {
 
   const [dialogTab, setDialogTab] = useState<'identity' | 'advanced'>('identity');
 
-  // ── Smart Location States (Gemini Integration) ──
-  const GEMINI_KEY = (import.meta as any).env?.VITE_GEMINI_KEY || "";
-  const [addrSuggestions, setAddrSuggestions] = useState<string[]>([]);
+  // ── Smart Location States (Places API proxy — no client-side API keys) ──
+  // Flaw #5 & #17 fix: removed Gemini key from frontend; use the existing
+  // /attendance/places/autocomplete + /places/details backend proxy instead.
+  // This also fixes hallucinated coordinates from the LLM geocoding approach.
+  const [addrSuggestions, setAddrSuggestions] = useState<{ place_id: string; description: string; main: string; secondary: string; types: string[] }[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -156,62 +159,34 @@ export function EmployeesPage() {
   }, [searchTerm]);
 
   const suggestLocations = async (val: string) => {
-    if (!val || val.length < 3) {
-      setAddrSuggestions([]);
-      return;
-    }
-    if (!GEMINI_KEY) {
-      toast.error('AI Access Key Missing');
-      setIsSuggesting(false);
-      return;
-    }
+    if (!val || val.length < 2) { setAddrSuggestions([]); return; }
+    if (val === lastQueriedAddr.current) return;
+    lastQueriedAddr.current = val;
     setIsSuggesting(true);
     try {
-      const prompt = `You are a geocoding suggest engine. Given this address fragment: "${val}", suggest exactly 5 real-world, complete addresses. Output ONLY a raw JSON array of strings. No markdown backticks, no text.`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      if (!res.ok) throw new Error('API Rejected');
+      const params = new URLSearchParams({ q: val });
+      const res = await fetch(`${API_URL}/attendance/places/autocomplete?${params}`, { headers });
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-      const cleanJson = text.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      if (Array.isArray(parsed)) setAddrSuggestions(parsed);
-      setShowSuggestions(true);
-    } catch (e: any) { 
-      toast.error(`AI Sync: ${e.message}`);
-    }
+      if (Array.isArray(data)) { setAddrSuggestions(data); setShowSuggestions(data.length > 0); }
+    } catch { /* silent */ }
     finally { setIsSuggesting(false); }
   };
 
-  const smartGeocode = async (address: string) => {
-    if (!address) return;
-    if (!GEMINI_KEY) return toast.error('AI Access Key Missing');
-    
+  const smartGeocode = async (suggestion: { place_id: string; description: string; main: string }) => {
     setIsGeocoding(true);
-    setEmpForm(prev => ({ ...prev, address }));
+    setEmpForm(prev => ({ ...prev, address: suggestion.description }));
     setShowSuggestions(false);
     try {
-      const prompt = `You are as geocoding expert. For this address: "${address}", find real latitude and longitude. Output ONLY a raw JSON like: {"lat": 12.345, "lng": 67.890}. No markdown.`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      if (!res.ok) throw new Error('API Sync Delayed');
+      const res = await fetch(`${API_URL}/attendance/places/details?place_id=${encodeURIComponent(suggestion.place_id)}`, { headers });
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-      const cleanJson = text.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      if (parsed.lat && parsed.lng) {
-        setEmpForm(prev => ({ ...prev, lat: parsed.lat, lng: parsed.lng }));
-        toast.success("Coordinates Synchronized");
+      if (data.lat && data.lng) {
+        setEmpForm(prev => ({ ...prev, lat: data.lat, lng: data.lng, address: data.name || suggestion.main || suggestion.description }));
+        toast.success('Location coordinates resolved');
+      } else {
+        toast.error('Could not resolve coordinates for this location');
       }
-    } catch (e: any) {
-      toast.error("AI Resolution Failed");
-    } finally { setIsGeocoding(false); }
+    } catch { toast.error('Location lookup failed'); }
+    finally { setIsGeocoding(false); }
   };
 
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'x-device-id': deviceId || '' };
@@ -219,8 +194,14 @@ export function EmployeesPage() {
   const loadEmployees = async (search = '') => {
     try {
       const raw = localStorage.getItem('currentProfile');
-      const p = raw ? JSON.parse(raw) : null;
-      const pid = (typeof p === 'string' ? JSON.parse(p) : p)?.id ?? '';
+      // Flaw #14 fix: normalize the stored value — handle both plain object and legacy double-stringified formats
+      let pid = '';
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          pid = (typeof parsed === 'string' ? JSON.parse(parsed) : parsed)?.id ?? '';
+        } catch { pid = ''; }
+      }
       const params = new URLSearchParams({ search });
       if (pid) params.set('profileId', pid);
       const res = await fetch(`${API_URL}/employees?${params}`, { headers });
@@ -284,8 +265,8 @@ export function EmployeesPage() {
         try {
           const raw = localStorage.getItem('currentProfile');
           if (!raw) return null;
-          const p = JSON.parse(raw);
-          return (typeof p === 'string' ? JSON.parse(p) : p)?.id ?? null;
+          const parsed = JSON.parse(raw);
+          return (typeof parsed === 'string' ? JSON.parse(parsed) : parsed)?.id ?? null;
         } catch { return null; }
       })();
 
@@ -680,40 +661,59 @@ export function EmployeesPage() {
               </>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Check-In</Label>
-                    <Input type="time" value={empForm.checkInTime} onChange={e => setEmpForm({...empForm, checkInTime: e.target.value})} className="rounded-xl h-12 bg-muted/30 border-none" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Check-Out</Label>
-                    <Input type="time" value={empForm.checkOutTime} onChange={e => setEmpForm({...empForm, checkOutTime: e.target.value})} className="rounded-xl h-12 bg-muted/30 border-none" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Geofence (Meters)</Label>
-                  <Input type="number" value={empForm.geofenceMeters} onChange={e => setEmpForm({...empForm, geofenceMeters: Number(e.target.value)})} className="rounded-xl h-12 bg-muted/30 border-none" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Latitude</Label>
-                    <Input type="number" step="any" value={empForm.lat} onChange={e => setEmpForm({...empForm, lat: Number(e.target.value)})} className="rounded-xl h-12 bg-muted/30 border-none" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Longitude</Label>
-                    <Input type="number" step="any" value={empForm.lng} onChange={e => setEmpForm({...empForm, lng: Number(e.target.value)})} className="rounded-xl h-12 bg-muted/30 border-none" />
-                  </div>
-                </div>
-                <div className="space-y-2 relative">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Work Address</Label>
-                  <Input value={empForm.address} onFocus={() => setShowSuggestions(true)} onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} onChange={e => setEmpForm({...empForm, address: e.target.value})} className="rounded-xl h-12 bg-muted/30 border-none" placeholder="Resolve with AI..." />
-                  {showSuggestions && addrSuggestions.length > 0 && (
-                    <div className="absolute z-[200] left-0 right-0 top-full mt-2 bg-card border border-border/40 rounded-2xl shadow-2xl p-2">
-                      {addrSuggestions.map((s, i) => (
-                        <button key={i} onClick={() => smartGeocode(s)} className="w-full text-left px-4 py-3 rounded-xl hover:bg-primary/10 text-xs font-bold transition-all border-b border-border/10 last:border-0">{s}</button>
-                      ))}
-                    </div>
-                  )}
+                <div className="space-y-4">
+                   <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-1.5">
+                       <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Check-In</Label>
+                       <Input type="time" value={empForm.checkInTime} onChange={e => setEmpForm({...empForm, checkInTime: e.target.value})} className="rounded-xl h-12 bg-muted/30 border-none" />
+                     </div>
+                     <div className="space-y-1.5">
+                       <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Check-Out</Label>
+                       <Input type="time" value={empForm.checkOutTime} onChange={e => setEmpForm({...empForm, checkOutTime: e.target.value})} className="rounded-xl h-12 bg-muted/30 border-none" />
+                     </div>
+                   </div>
+
+                   <div className="space-y-1.5">
+                     <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Geofence (Meters)</Label>
+                     <Input type="number" value={empForm.geofenceMeters} onChange={e => setEmpForm({...empForm, geofenceMeters: Number(e.target.value)})} className="rounded-xl h-12 bg-muted/30 border-none" />
+                   </div>
+
+                   {/* SMART MAP PICKER */}
+                   <div className="pt-2">
+                     <WorkLocationPicker 
+                       lat={empForm.lat} 
+                       lng={empForm.lng} 
+                       geofenceMeters={empForm.geofenceMeters}
+                       onChange={(data) => {
+                         const updates: any = { lat: data.lat, lng: data.lng };
+                         if (data.address) updates.address = data.address;
+                         setEmpForm(prev => ({ ...prev, ...updates }));
+                       }}
+                     />
+                   </div>
+
+                   <div className="space-y-2 relative">
+                     <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50 ml-1">Work Address (Manual Search)</Label>
+                     <Input
+                       value={empForm.address}
+                       onFocus={() => { if (addrSuggestions.length > 0) setShowSuggestions(true); }}
+                       onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                       onChange={e => { setEmpForm({...empForm, address: e.target.value}); suggestLocations(e.target.value); }}
+                       className="rounded-xl h-12 bg-muted/30 border-none"
+                       placeholder="Search address..."
+                     />
+                     {isSuggesting && <p className="text-[10px] text-muted-foreground px-1">Searching...</p>}
+                     {showSuggestions && addrSuggestions.length > 0 && (
+                       <div className="absolute z-[200] left-0 right-0 bottom-full mb-2 bg-card border border-border/40 rounded-2xl shadow-2xl p-2 max-h-48 overflow-y-auto">
+                         {addrSuggestions.map((s, i) => (
+                           <button key={i} onMouseDown={() => smartGeocode(s)} className="w-full text-left px-4 py-3 rounded-xl hover:bg-primary/10 text-xs font-bold transition-all border-b border-border/10 last:border-0">
+                             <span className="block truncate">{s.main}</span>
+                             <span className="block text-[10px] text-muted-foreground truncate font-normal">{s.secondary}</span>
+                           </button>
+                         ))}
+                       </div>
+                     )}
+                   </div>
                 </div>
               </>
             )}
