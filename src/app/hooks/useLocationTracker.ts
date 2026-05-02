@@ -214,43 +214,37 @@ export function useLocationTracker() {
       }
     };
 
-    // ── GPS watcher — web/PWA path (native uses TrackingService below) ──────
-    const isNativeAndroid =
-      !!(window as any).Capacitor?.isNativePlatform?.() &&
-      (window as any).Capacitor?.getPlatform?.() === "android";
-
-    if (!isNativeAndroid) {
-      try {
-        const perm = await Geolocation.requestPermissions();
-        if (perm.location !== "granted") {
-          toast.error("Location permission denied — tracking disabled.");
-        }
-
-        watchIdRef.current = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-          (position: Position | null, err: any) => {
-            if (err) {
-              if (err.message?.includes("denied")) {
-                toast.error("Set location to 'Allow all the time' in Settings.");
-              }
-              return;
-            }
-            if (!position) return;
-            const { latitude, longitude, speed, heading, accuracy } = position.coords;
-            sendData(latitude, longitude, speed ?? null, heading ?? null, accuracy ?? null);
-          },
-        );
-      } catch {
-        // Web browser fallback
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => {
-            const { latitude, longitude, speed, heading, accuracy } = pos.coords;
-            sendData(latitude, longitude, speed ?? null, heading ?? null, accuracy ?? null);
-          },
-          (err) => console.warn("[tracker] GPS error:", err.message),
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
-        );
+    // ── GPS watcher — always run in foreground for smooth tracking ─────────
+    try {
+      const perm = await Geolocation.requestPermissions();
+      if (perm.location !== "granted") {
+        toast.error("Location permission denied — tracking disabled.");
       }
+
+      watchIdRef.current = await Geolocation.watchPosition(
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+        (position: Position | null, err: any) => {
+          if (err) {
+            if (err.message?.includes("denied")) {
+              toast.error("Set location to 'Allow all the time' in Settings.");
+            }
+            return;
+          }
+          if (!position) return;
+          const { latitude, longitude, speed, heading, accuracy } = position.coords;
+          sendData(latitude, longitude, speed ?? null, heading ?? null, accuracy ?? null);
+        },
+      );
+    } catch {
+      // Web browser fallback
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, speed, heading, accuracy } = pos.coords;
+          sendData(latitude, longitude, speed ?? null, heading ?? null, accuracy ?? null);
+        },
+        (err) => console.warn("[tracker] GPS error:", err.message),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+      );
     }
 
     // ── Native foreground service — keeps GPS alive when screen is off ──────

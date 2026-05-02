@@ -12,7 +12,6 @@ import { useIsNative } from './hooks/useIsNative';
 import { AuthPage } from './pages/AuthPage';
 import { AppLayout } from './components/AppLayout';
 import { prefetchRoutesOnIdle } from './hooks/usePrefetch';
-import { EmployeeLoginPage } from './pages/EmployeeLoginPage';
 import { EmployeeAttendancePage } from './pages/EmployeeAttendancePage';
 import { useCurrentProfile } from './hooks/useCurrentProfile';
 
@@ -114,7 +113,7 @@ const createRouter = window.location.protocol === 'file:' ? createHashRouter : c
 function buildRouter() {
   return createRouter([
     { path: "/", element: <AuthPage /> },
-    { path: "/employee/login",      element: <EmployeeLoginPage /> },
+    { path: "/employee/login",      element: <AuthPage /> },
     { path: "/employee/attendance", element: <EmployeeAttendancePage /> },
     {
       element: <LayoutRoute />,

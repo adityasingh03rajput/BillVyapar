@@ -20,6 +20,7 @@ const liveLocationLimiter = rateLimit({
   message: { error: 'Too many location updates' },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 /**

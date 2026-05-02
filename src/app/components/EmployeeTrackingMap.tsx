@@ -34,10 +34,9 @@ declare global {
 
 const GOOGLE_MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ?? "";
 
-// 120s stale: mobile OS background pings can be delayed by 60s+. 
-// 120s gives them 2 full cycles before signal loss is reported.
-const STALE_THRESHOLD_MS = 120_000;
-const SNAPSHOT_REFRESH_MS = 120_000;
+// 60s stale: native posts every 30s forced, web every 20-30s. 60s = 2x buffer.
+const STALE_THRESHOLD_MS = 60_000;
+const SNAPSHOT_REFRESH_MS = 60_000;
 
 // ── Google Maps loader (singleton) ────────────────────────────────────────────
 

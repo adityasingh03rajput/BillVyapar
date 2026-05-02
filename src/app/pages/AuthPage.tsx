@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'sonner';
@@ -34,7 +34,11 @@ export function AuthPage() {
   const isNative = useIsNative();
   const { resolvedTheme } = useTheme();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [loginTab, setLoginTab] = useState<'owner' | 'employee'>('owner');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [loginTab, setLoginTab] = useState<'owner' | 'employee'>(
+    location.pathname.includes('/employee') ? 'employee' : 'owner'
+  );
   const [mode, setMode] = useState<'auth' | 'forgot' | 'reset'>('auth');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,7 +58,6 @@ export function AuthPage() {
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
   const [clickCount, setClickCount] = useState(0);
   const { signIn, signUp, signInAsEmployee, user, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (authLoading) return;
@@ -134,9 +137,7 @@ export function AuthPage() {
     return (
       <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: resolvedTheme === 'light' ? '#f8fafc' : '#0f172a' }}>
         <div onClick={handleLogoClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-          <div style={{ width: 64, height: 64, borderRadius: 16, background: 'linear-gradient(135deg,#6366f1,#818cf8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          </div>
+          <img src="logo.png" alt="BillVyapar" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'contain' }} />
           <span style={{ fontSize: 22, fontWeight: 700, color: '#818cf8', fontFamily: 'system-ui,sans-serif' }}>BillVyapar</span>
         </div>
       </div>
@@ -217,7 +218,7 @@ export function AuthPage() {
     ? (loginTab === 'employee' ? 'Employee Login' : isSignUp ? 'Create Account' : 'Welcome Back')
     : mode === 'forgot' ? 'Forgot Password' : 'Reset Password';
   const subtitle = mode === 'auth'
-    ? (loginTab === 'employee' ? 'Sign in with your employee credentials' : isSignUp ? 'Start managing your business' : 'Sign in to your dashboard')
+    ? (loginTab === 'employee' ? 'Staff Access Portal' : isSignUp ? 'Start managing your business' : 'Sign in to your dashboard')
     : mode === 'forgot' ? 'Enter your email to receive an OTP' : 'Enter the OTP and your new password';
   const btnLabel = loading ? 'Please wait…'
     : mode === 'forgot' ? 'Send OTP' : mode === 'reset' ? 'Reset Password'
@@ -228,12 +229,24 @@ export function AuthPage() {
     return (
       <div style={{
         position: 'fixed', inset: 0,
+        backgroundImage: 'url("mobile_auth_bg.png")',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
         backgroundColor: resolvedTheme === 'light' ? '#f8fafc' : '#0f172a',
         display: 'flex', flexDirection: 'column',
         fontFamily: 'system-ui, sans-serif',
         overflow: 'auto',
         padding: '20px'
       }}>
+        {/* Dark overlay for better readability */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: resolvedTheme === 'light' ? 'rgba(248,250,252,0.8)' : 'rgba(15,23,42,0.8)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          zIndex: 0
+        }} />
+
         {/* Status indicator (top right) - Only green dot */}
         <div onClick={handleLogoClick} style={{
           position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 16px)',
@@ -311,23 +324,18 @@ export function AuthPage() {
 
         {/* Main Content */}
         <div style={{ 
+          position: 'relative', zIndex: 1,
           flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center',
           maxWidth: 400, margin: '0 auto', width: '100%'
         }}>
-          {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <div style={{ 
-              width: 64, height: 64, borderRadius: 16, 
-              background: 'linear-gradient(135deg,#6366f1,#818cf8)', 
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 12
-            }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
+            <div onClick={handleLogoClick} style={{ display: 'inline-block', cursor: 'pointer' }}>
+              <img src="logo.png" alt="BillVyapar" style={{ 
+                width: 80, height: 80, borderRadius: 20, 
+                objectFit: 'contain',
+                marginBottom: 12,
+                boxShadow: '0 8px 16px rgba(0,0,0,0.2)'
+              }} />
             </div>
             <h1 style={{ 
               fontSize: 28, fontWeight: 800, 
@@ -569,10 +577,10 @@ export function AuthPage() {
 
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div onClick={handleLogoClick} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: 14, background: 'linear-gradient(135deg,#4f7df3,#2350db)', boxShadow: '0 4px 16px rgba(31,78,216,0.35)', marginBottom: 10, cursor: 'pointer' }}>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <div onClick={handleLogoClick} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 14, background: 'rgba(255,255,255,0.8)', padding: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', marginBottom: 10, cursor: 'pointer' }}>
+              <img src="logo.png" alt="BillVyapar" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
-            <h1 onClick={handleLogoClick} style={{ fontFamily: 'Newsreader, serif', fontSize: 'clamp(22px,6vw,30px)', fontWeight: 700, color: '#1a1a14', margin: 0, letterSpacing: '-0.3px', cursor: 'pointer' }}>BillVyapar+{apiOverrideActive ? ' (DEV)' : ''}</h1>
+            <h1 onClick={handleLogoClick} style={{ fontFamily: 'Newsreader, serif', fontSize: 'clamp(22px,6vw,30px)', fontWeight: 700, color: '#1a1a14', margin: 0, letterSpacing: '-0.3px', cursor: 'pointer' }}>BillVyapar{apiOverrideActive ? ' (DEV)' : ''}</h1>
             <p style={{ fontFamily: 'Newsreader, serif', fontStyle: 'italic', fontSize: 14, color: '#4a4a3a', margin: '4px 0 0' }}>Business Billing &amp; Documentation</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 14 }}>
               {[{label:'GST Invoices',rot:'-1deg'},{label:'Multi-Business',rot:'2deg'},{label:'Offline Ready',rot:'-2deg'}].map(({label,rot}) => (
@@ -585,7 +593,7 @@ export function AuthPage() {
           {mode === 'auth' && (
             <div style={{ display: 'flex', background: 'rgba(0,0,0,0.06)', borderRadius: 8, padding: 3, marginBottom: 20, gap: 2 }}>
               {(['owner','employee'] as const).map(tab => (
-                <button key={tab} type="button" onClick={() => { if (tab === 'employee') { navigate('/employee/login'); return; } setLoginTab(tab); setIsSignUp(false); }}
+                <button key={tab} type="button" onClick={() => { setLoginTab(tab); setIsSignUp(false); }}
                   style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'Manrope, sans-serif', transition: 'all 0.15s', background: loginTab === tab ? 'rgba(255,255,255,0.9)' : 'transparent', color: loginTab === tab ? '#1a1a14' : '#6a6a5a', boxShadow: loginTab === tab ? '0 1px 4px rgba(0,0,0,0.12)' : 'none' }}>
                   {tab === 'owner' ? '🏢 Owner / Business' : '👤 Employee'}
                 </button>
@@ -690,7 +698,7 @@ export function AuthPage() {
 
       <footer style={{ background: 'transparent' }}>
         <div style={{ maxWidth: 1120, margin: '0 auto', padding: '16px', display: 'flex', justifyContent: 'center' }}>
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', margin: 0, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>© 2025 BillVyapar</p>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', margin: 0, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>© 2026 BillVyapar</p>
         </div>
       </footer>
     </div>

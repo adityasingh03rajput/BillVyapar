@@ -157,6 +157,7 @@ const apiLimiter = rateLimit({
     const token = auth.startsWith("Bearer ") ? auth.slice(7, 47) : ""; // first 40 chars of token
     return token || req.ip;
   },
+  validate: { xForwardedForHeader: false }, // Fly.io handles this, avoid warning
 });
 
 app.use("/auth", authLimiter);
@@ -209,7 +210,7 @@ app.use("/geocode", geocodeRouter);
 // ── Static frontend ───────────────────────────────────────────────────────────
 const distPathCandidates = [
   path.resolve(__dirname, "../../dist"),
-  path.resolve(__dirname, "../../src/dist"),
+  path.resolve(__dirname, "../dist"), // For deployment where dist is inside app/dist
 ];
 const distPath = distPathCandidates.find((p) =>
   fs.existsSync(path.join(p, "index.html"))
